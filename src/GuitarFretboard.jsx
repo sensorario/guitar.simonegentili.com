@@ -2,12 +2,25 @@ import React from 'react';
 
 function GuitarFretboard() {
     const [hoveredNote, setHoveredNote] = React.useState(null);
-    
+    const [selectedNote, setSelectedNote] = React.useState(null);
+
     const strings = 6;
     const frets = 24;
     const scaleLength = 1200;
     const fretboardHeightLeft = 160; // Altezza a sinistra (meno stretta)
     const fretboardHeightRight = 200; // Altezza a destra (più larga)
+
+    // Note delle corde a vuoto (dal MI alto al MI basso - invertito)
+    const openStringNotes = ['E', 'B', 'G', 'D', 'A', 'E'];
+    const noteSequence = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+    // Calcola il nome della nota data la corda e il tasto
+    const getNoteName = (stringIndex, fret) => {
+        const openNote = openStringNotes[stringIndex];
+        const openNoteIndex = noteSequence.indexOf(openNote);
+        const noteIndex = (openNoteIndex + fret) % 12;
+        return noteSequence[noteIndex];
+    };
 
     // Funzione per calcolare l'altezza in base alla posizione x
     const getHeightAtX = (x, totalWidth) => {
@@ -24,7 +37,7 @@ function GuitarFretboard() {
 
     // Larghezza totale del fretboard basata sull'ultimo tasto
     const fretboardWidth = getFretPosition(frets) + 20;
-    
+
     // Calcola la posizione Y di una corda dato l'indice e la posizione X
     const getStringY = (stringIndex, x) => {
         const ratio = (stringIndex + 1) / (strings + 1);
@@ -54,7 +67,7 @@ function GuitarFretboard() {
                     const ratio = (i + 1) / (strings + 1);
                     const y1 = (fretboardHeightRight - fretboardHeightLeft) / 2 + ratio * fretboardHeightLeft;
                     const y2 = ratio * fretboardHeightRight;
-                    const thickness = 0.5 + (strings - i) * 0.4;
+                    const thickness = 0.5 + i * 0.4; // Invertito: la prima corda è sottile, l'ultima grossa
                     return (
                         <line
                             key={`string-${i}`}
@@ -115,7 +128,7 @@ function GuitarFretboard() {
                         </g>
                     );
                 })}
-                
+
                 {/* Zone interattive per le note */}
                 {[...Array(strings)].map((_, stringIndex) => (
                     [...Array(frets)].map((_, fretIndex) => {
@@ -123,7 +136,7 @@ function GuitarFretboard() {
                         const x = (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
                         const y = getStringY(stringIndex, x);
                         const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
-                        
+
                         return (
                             <g key={`note-${stringIndex}-${fretNum}`}>
                                 {/* Area invisibile per il mouse hover */}
@@ -135,6 +148,11 @@ function GuitarFretboard() {
                                     style={{ cursor: 'pointer' }}
                                     onMouseEnter={() => setHoveredNote({ string: stringIndex, fret: fretNum })}
                                     onMouseLeave={() => setHoveredNote(null)}
+                                    onClick={() => setSelectedNote({
+                                        string: stringIndex,
+                                        fret: fretNum,
+                                        note: getNoteName(stringIndex, fretNum)
+                                    })}
                                 />
                                 {/* Cerchietto giallo visibile solo in hover */}
                                 {isHovered && (
@@ -153,6 +171,18 @@ function GuitarFretboard() {
                     })
                 ))}
             </svg>
+
+            {/* Mostra la nota selezionata */}
+            {selectedNote && (
+                <div style={{
+                    marginTop: '20px',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    color: '#333'
+                }}>
+                    Nota: {selectedNote.note} (Corda {selectedNote.string + 1}, Tasto {selectedNote.fret})
+                </div>
+            )}
         </div>
     );
 }
