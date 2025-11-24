@@ -21,6 +21,29 @@ function GuitarFretboard() {
         const noteIndex = (openNoteIndex + fret) % 12;
         return noteSequence[noteIndex];
     };
+    
+    // Calcola la posizione Y della nota sul pentagramma
+    // Il pentagramma ha 5 linee, con spazi tra di esse
+    // Le linee sono a y: 30, 50, 70, 90, 110 (ogni 20px)
+    const getNotePositionOnStaff = (noteName) => {
+        // Mappa delle note alla loro posizione sul pentagramma (chiave di violino)
+        // Valori negativi = sopra il pentagramma, positivi = sotto
+        const notePositions = {
+            'C': 110,   // Do (sotto la prima linea)
+            'C#': 105,
+            'D': 100,   // Re (sulla prima linea)
+            'D#': 95,
+            'E': 90,    // Mi (tra prima e seconda linea)
+            'F': 85,    // Fa (sulla seconda linea)
+            'F#': 80,
+            'G': 70,    // Sol (terza linea)
+            'G#': 65,
+            'A': 60,    // La (tra terza e quarta)
+            'A#': 55,
+            'B': 50     // Si (quarta linea)
+        };
+        return notePositions[noteName] || 70;
+    };
 
     // Funzione per calcolare l'altezza in base alla posizione x
     const getHeightAtX = (x, totalWidth) => {
@@ -214,6 +237,30 @@ function GuitarFretboard() {
                     >
                         𝄞
                     </text>
+                    
+                    {/* Seminima se c'è una nota selezionata */}
+                    {selectedNote && (
+                        <g>
+                            {/* Testa della nota (pallino pieno) */}
+                            <ellipse
+                                cx="200"
+                                cy={getNotePositionOnStaff(selectedNote.note)}
+                                rx="8"
+                                ry="6"
+                                fill="black"
+                                transform={`rotate(-20 200 ${getNotePositionOnStaff(selectedNote.note)})`}
+                            />
+                            {/* Gambo della seminima */}
+                            <line
+                                x1="207"
+                                y1={getNotePositionOnStaff(selectedNote.note)}
+                                x2="207"
+                                y2={getNotePositionOnStaff(selectedNote.note) - 35}
+                                stroke="black"
+                                strokeWidth="1.5"
+                            />
+                        </g>
+                    )}
                 </svg>
             </div>
         </div>
