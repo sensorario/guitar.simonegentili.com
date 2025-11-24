@@ -1,9 +1,19 @@
+import React from 'react';
+
 function GuitarFretboard() {
+    const [hoveredNote, setHoveredNote] = React.useState(null);
+    
     const strings = 6;
     const frets = 24;
-    const scaleLength = 1200; // Lunghezza scala aumentata per tastiera più larga
-    const fretboardHeight = 200;
-    const stringSpacing = fretboardHeight / (strings + 1);
+    const scaleLength = 1200;
+    const fretboardHeightLeft = 160; // Altezza a sinistra (meno stretta)
+    const fretboardHeightRight = 200; // Altezza a destra (più larga)
+
+    // Funzione per calcolare l'altezza in base alla posizione x
+    const getHeightAtX = (x, totalWidth) => {
+        const ratio = x / totalWidth;
+        return fretboardHeightLeft + (fretboardHeightRight - fretboardHeightLeft) * ratio;
+    };
 
     // Calcola le posizioni dei tasti usando la regola del 12
     const getFretPosition = (fretNumber) => {
@@ -13,26 +23,45 @@ function GuitarFretboard() {
     };
 
     // Larghezza totale del fretboard basata sull'ultimo tasto
-    const fretboardWidth = getFretPosition(frets) + 20; // +20px per margine finale
+    const fretboardWidth = getFretPosition(frets) + 20;
+    
+    // Calcola la posizione Y di una corda dato l'indice e la posizione X
+    const getStringY = (stringIndex, x) => {
+        const ratio = (stringIndex + 1) / (strings + 1);
+        const y1 = (fretboardHeightRight - fretboardHeightLeft) / 2 + ratio * fretboardHeightLeft;
+        const y2 = ratio * fretboardHeightRight;
+        const xRatio = x / fretboardWidth;
+        return y1 + (y2 - y1) * xRatio;
+    };
 
     return (
         <div style={{ margin: '20px 0' }}>
             <h2>Tastiera della Chitarra</h2>
-            <svg width={fretboardWidth} height={fretboardHeight} xmlns="http://www.w3.org/2000/svg">
-                {/* Sfondo della tastiera */}
-                <rect x="0" y="0" width={fretboardWidth} height={fretboardHeight} fill="#8B4513" stroke="#654321" strokeWidth="3" />
+            <svg width={fretboardWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg">
+                {/* Sfondo della tastiera a forma di trapezio */}
+                <polygon
+                    points={`0,${(fretboardHeightRight - fretboardHeightLeft) / 2} 
+                             0,${(fretboardHeightRight + fretboardHeightLeft) / 2} 
+                             ${fretboardWidth},${fretboardHeightRight} 
+                             ${fretboardWidth},0`}
+                    fill="#8B4513"
+                    stroke="#654321"
+                    strokeWidth="3"
+                />
 
                 {/* Corde */}
                 {[...Array(strings)].map((_, i) => {
-                    const y = stringSpacing * (i + 1);
+                    const ratio = (i + 1) / (strings + 1);
+                    const y1 = (fretboardHeightRight - fretboardHeightLeft) / 2 + ratio * fretboardHeightLeft;
+                    const y2 = ratio * fretboardHeightRight;
                     const thickness = 0.5 + (strings - i) * 0.4;
                     return (
                         <line
                             key={`string-${i}`}
                             x1="0"
-                            y1={y}
+                            y1={y1}
                             x2={fretboardWidth}
-                            y2={y}
+                            y2={y2}
                             stroke="#C0C0C0"
                             strokeWidth={thickness}
                         />
@@ -42,13 +71,16 @@ function GuitarFretboard() {
                 {/* Tasti */}
                 {[...Array(frets + 1)].map((_, i) => {
                     const x = getFretPosition(i);
+                    const heightAtX = getHeightAtX(x, fretboardWidth);
+                    const yTop = (fretboardHeightRight - heightAtX) / 2;
+                    const yBottom = yTop + heightAtX;
                     return (
                         <line
                             key={`fret-${i}`}
                             x1={x}
-                            y1="0"
+                            y1={yTop}
                             x2={x}
-                            y2={fretboardHeight}
+                            y2={yBottom}
                             stroke="#D4AF37"
                             strokeWidth={i === 0 ? "4" : "2"}
                         />
@@ -58,7 +90,7 @@ function GuitarFretboard() {
                 {/* Marker dots sui tasti 3, 5, 7, 9, 15, 17, 19, 21 */}
                 {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => {
                     const x = (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
-                    const y = fretboardHeight / 2;
+                    const y = fretboardHeightRight / 2;
                     return (
                         <circle
                             key={`dot-${fret}`}
@@ -74,8 +106,8 @@ function GuitarFretboard() {
                 {/* Due dots sul 12° e 24° tasto */}
                 {[12, 24].map(fret => {
                     const x = (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
-                    const y1 = fretboardHeight / 3;
-                    const y2 = (2 * fretboardHeight) / 3;
+                    const y1 = fretboardHeightRight / 3;
+                    const y2 = (2 * fretboardHeightRight) / 3;
                     return (
                         <g key={`double-dot-${fret}`}>
                             <circle cx={x} cy={y1} r="6" fill="#F5F5DC" opacity="0.7" />
@@ -83,6 +115,43 @@ function GuitarFretboard() {
                         </g>
                     );
                 })}
+                
+                {/* Zone interattive per le note */}
+                {[...Array(strings)].map((_, stringIndex) => (
+                    [...Array(frets)].map((_, fretIndex) => {
+                        const fretNum = fretIndex + 1;
+                        const x = (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
+                        const y = getStringY(stringIndex, x);
+                        const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
+                        
+                        return (
+                            <g key={`note-${stringIndex}-${fretNum}`}>
+                                {/* Area invisibile per il mouse hover */}
+                                <circle
+                                    cx={x}
+                                    cy={y}
+                                    r="20"
+                                    fill="transparent"
+                                    style={{ cursor: 'pointer' }}
+                                    onMouseEnter={() => setHoveredNote({ string: stringIndex, fret: fretNum })}
+                                    onMouseLeave={() => setHoveredNote(null)}
+                                />
+                                {/* Cerchietto giallo visibile solo in hover */}
+                                {isHovered && (
+                                    <circle
+                                        cx={x}
+                                        cy={y}
+                                        r="12"
+                                        fill="yellow"
+                                        stroke="orange"
+                                        strokeWidth="2"
+                                        style={{ pointerEvents: 'none' }}
+                                    />
+                                )}
+                            </g>
+                        );
+                    })
+                ))}
             </svg>
         </div>
     );
