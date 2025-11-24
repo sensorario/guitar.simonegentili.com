@@ -21,7 +21,7 @@ function GuitarFretboard() {
         const noteIndex = (openNoteIndex + fret) % 12;
         return noteSequence[noteIndex];
     };
-    
+
     // Calcola la posizione Y della nota sul pentagramma
     // Il pentagramma ha 5 linee, con spazi tra di esse
     // Le linee sono a y: 30, 50, 70, 90, 110 (ogni 20px)
@@ -206,63 +206,6 @@ function GuitarFretboard() {
                     Nota: {selectedNote.note} (Corda {selectedNote.string + 1}, Tasto {selectedNote.fret})
                 </div>
             )}
-            
-            {/* Pentagramma */}
-            <div style={{ marginTop: '40px' }}>
-                <h3>Pentagramma</h3>
-                <svg width="800" height="150" xmlns="http://www.w3.org/2000/svg">
-                    {/* 5 linee del pentagramma */}
-                    {[0, 1, 2, 3, 4].map((line) => {
-                        const y = 30 + line * 20;
-                        return (
-                            <line
-                                key={`staff-line-${line}`}
-                                x1="50"
-                                y1={y}
-                                x2="750"
-                                y2={y}
-                                stroke="black"
-                                strokeWidth="2"
-                            />
-                        );
-                    })}
-                    
-                    {/* Chiave di violino */}
-                    <text 
-                        x="60" 
-                        y="120" 
-                        fontSize="180" 
-                        fontFamily="serif"
-                        fill="black"
-                    >
-                        𝄞
-                    </text>
-                    
-                    {/* Seminima se c'è una nota selezionata */}
-                    {selectedNote && (
-                        <g>
-                            {/* Testa della nota (pallino pieno) */}
-                            <ellipse
-                                cx="200"
-                                cy={getNotePositionOnStaff(selectedNote.note)}
-                                rx="8"
-                                ry="6"
-                                fill="black"
-                                transform={`rotate(-20 200 ${getNotePositionOnStaff(selectedNote.note)})`}
-                            />
-                            {/* Gambo della seminima */}
-                            <line
-                                x1="207"
-                                y1={getNotePositionOnStaff(selectedNote.note)}
-                                x2="207"
-                                y2={getNotePositionOnStaff(selectedNote.note) - 35}
-                                stroke="black"
-                                strokeWidth="1.5"
-                            />
-                        </g>
-                    )}
-                </svg>
-            </div>
         </div>
     );
 }
