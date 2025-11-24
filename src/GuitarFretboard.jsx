@@ -1,8 +1,19 @@
 import React from 'react';
+import configRepository from './repositories/ConfigRepository';
 
 function GuitarFretboard() {
     const [hoveredNote, setHoveredNote] = React.useState(null);
     const [selectedNote, setSelectedNote] = React.useState(null);
+    const [useItalianNotation, setUseItalianNotation] = React.useState(() => {
+        // Carica la configurazione all'avvio
+        const config = configRepository.load();
+        return config.useItalianNotation;
+    });
+
+    // Salva la configurazione quando cambia
+    React.useEffect(() => {
+        configRepository.update('useItalianNotation', useItalianNotation);
+    }, [useItalianNotation]);
 
     const strings = 6;
     const frets = 24;
@@ -13,6 +24,27 @@ function GuitarFretboard() {
     // Note delle corde a vuoto (dal MI alto al MI basso - invertito)
     const openStringNotes = ['E', 'B', 'G', 'D', 'A', 'E'];
     const noteSequence = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+    // Mappa da notazione internazionale a italiana
+    const noteToItalian = {
+        'C': 'Do',
+        'C#': 'Do#',
+        'D': 'Re',
+        'D#': 'Re#',
+        'E': 'Mi',
+        'F': 'Fa',
+        'F#': 'Fa#',
+        'G': 'Sol',
+        'G#': 'Sol#',
+        'A': 'La',
+        'A#': 'La#',
+        'B': 'Si'
+    };
+
+    // Funzione per convertire la nota nella notazione scelta
+    const formatNoteName = (noteName) => {
+        return useItalianNotation ? noteToItalian[noteName] : noteName;
+    };
 
     // Calcola il nome della nota data la corda e il tasto
     const getNoteName = (stringIndex, fret) => {
@@ -72,7 +104,53 @@ function GuitarFretboard() {
 
     return (
         <div style={{ margin: '20px 0' }}>
-            <h2>Tastiera della Chitarra</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                <h2 style={{ margin: 0 }}>Tastiera della Chitarra</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: '500' }}>Notazione:</span>
+                    <label style={{ 
+                        position: 'relative', 
+                        display: 'inline-block', 
+                        width: '60px', 
+                        height: '34px',
+                        cursor: 'pointer'
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={useItalianNotation}
+                            onChange={(e) => setUseItalianNotation(e.target.checked)}
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                        />
+                        <span style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: useItalianNotation ? '#4CAF50' : '#ccc',
+                            borderRadius: '34px',
+                            transition: 'background-color 0.3s',
+                            cursor: 'pointer'
+                        }}>
+                            <span style={{
+                                position: 'absolute',
+                                content: '',
+                                height: '26px',
+                                width: '26px',
+                                left: useItalianNotation ? '30px' : '4px',
+                                bottom: '4px',
+                                backgroundColor: 'white',
+                                borderRadius: '50%',
+                                transition: 'left 0.3s',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}></span>
+                        </span>
+                    </label>
+                    <span style={{ fontSize: '14px', minWidth: '150px' }}>
+                        {useItalianNotation ? 'Italiana (Do, Re, Mi)' : 'Internazionale (C, D, E)'}
+                    </span>
+                </div>
+            </div>
             <svg width={fretboardWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg">
                 {/* Sfondo della tastiera a forma di trapezio */}
                 <polygon
@@ -203,7 +281,7 @@ function GuitarFretboard() {
                     fontWeight: 'bold',
                     color: '#333'
                 }}>
-                    Nota: {selectedNote.note} (Corda {selectedNote.string + 1}, Tasto {selectedNote.fret})
+                    Nota: {formatNoteName(selectedNote.note)} (Corda {selectedNote.string + 1}, Tasto {selectedNote.fret})
                 </div>
             )}
         </div>
