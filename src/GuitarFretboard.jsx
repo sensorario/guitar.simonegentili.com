@@ -183,6 +183,39 @@ function GuitarFretboard() {
                     Nota: {selectedNote.note} (Corda {selectedNote.string + 1}, Tasto {selectedNote.fret})
                 </div>
             )}
+            
+            {/* Pentagramma */}
+            <div style={{ marginTop: '40px' }}>
+                <h3>Pentagramma</h3>
+                <svg width="800" height="150" xmlns="http://www.w3.org/2000/svg">
+                    {/* 5 linee del pentagramma */}
+                    {[0, 1, 2, 3, 4].map((line) => {
+                        const y = 30 + line * 20;
+                        return (
+                            <line
+                                key={`staff-line-${line}`}
+                                x1="50"
+                                y1={y}
+                                x2="750"
+                                y2={y}
+                                stroke="black"
+                                strokeWidth="2"
+                            />
+                        );
+                    })}
+                    
+                    {/* Chiave di violino */}
+                    <text 
+                        x="60" 
+                        y="120" 
+                        fontSize="180" 
+                        fontFamily="serif"
+                        fill="black"
+                    >
+                        𝄞
+                    </text>
+                </svg>
+            </div>
         </div>
     );
 }
