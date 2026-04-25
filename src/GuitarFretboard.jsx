@@ -1,9 +1,171 @@
 import React from 'react';
 import configRepository from './repositories/ConfigRepository';
 
+const OPEN_STRING_MIDI = [64, 59, 55, 50, 45, 40];
+const NOTE_SEQUENCE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NATURAL_NOTE_STEPS = {
+    C: 0,
+    D: 1,
+    E: 2,
+    F: 3,
+    G: 4,
+    A: 5,
+    B: 6
+};
+const STAFF_BASE_STEP = NATURAL_NOTE_STEPS.E + (4 * 7);
+
+const getPitchFromMidi = (midi) => {
+    const noteIndex = midi % 12;
+    const noteName = NOTE_SEQUENCE[noteIndex];
+    const octave = Math.floor(midi / 12) - 1;
+
+    return {
+        midi,
+        noteName,
+        octave,
+        displayMidi: midi + 12
+    };
+};
+
+const getStaffStep = (displayMidi) => {
+    const displayPitch = getPitchFromMidi(displayMidi);
+    const naturalNote = displayPitch.noteName[0];
+    return NATURAL_NOTE_STEPS[naturalNote] + (displayPitch.octave * 7);
+};
+
+const getLedgerLineSteps = (staffStep) => {
+    const ledgerSteps = [];
+
+    if (staffStep < STAFF_BASE_STEP) {
+        for (let step = STAFF_BASE_STEP - 2; step >= staffStep; step -= 2) {
+            ledgerSteps.push(step);
+        }
+    }
+
+    const topLineStep = STAFF_BASE_STEP + 8;
+    if (staffStep > topLineStep) {
+        for (let step = topLineStep + 2; step <= staffStep; step += 2) {
+            ledgerSteps.push(step);
+        }
+    }
+
+    return ledgerSteps;
+};
+
+function StaffNotation({ notes, formatNoteName }) {
+    const width = 980;
+    const height = 220;
+    const lineSpacing = 18;
+    const noteSpacing = 56;
+    const staffStartX = 70;
+    const headWidth = 18;
+    const headHeight = 12;
+    const baseY = 148;
+    const staffEndX = Math.max(width - 40, staffStartX + (Math.max(notes.length, 1) * noteSpacing) + 40);
+    const visibleNotes = notes.slice(-14);
+
+    return (
+        <div className="staff-panel">
+            <div className="staff-panel__header">
+                <h3>Pentagramma</h3>
+                <span>{notes.length} note nello stack</span>
+            </div>
+            <svg className="staff-panel__svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Pentagramma con le note selezionate">
+                {[0, 1, 2, 3, 4].map((lineIndex) => {
+                    const y = baseY - (lineIndex * lineSpacing);
+                    return (
+                        <line
+                            key={`staff-line-${lineIndex}`}
+                            x1={staffStartX}
+                            y1={y}
+                            x2={staffEndX}
+                            y2={y}
+                            stroke="#2d241c"
+                            strokeWidth="1.5"
+                        />
+                    );
+                })}
+
+                <text x="28" y={baseY - (lineSpacing * 1.1)} fontSize="60" fill="#2d241c" fontFamily="serif">
+                    &#119070;
+                </text>
+
+                {visibleNotes.map((note, noteIndex) => {
+                    const x = 120 + (noteIndex * noteSpacing);
+                    const staffStep = getStaffStep(note.displayMidi);
+                    const y = baseY - ((staffStep - STAFF_BASE_STEP) * (lineSpacing / 2));
+                    const ledgerSteps = getLedgerLineSteps(staffStep);
+                    const hasSharp = note.noteName.includes('#');
+
+                    return (
+                        <g key={note.id}>
+                            {ledgerSteps.map((ledgerStep) => {
+                                const ledgerY = baseY - ((ledgerStep - STAFF_BASE_STEP) * (lineSpacing / 2));
+                                return (
+                                    <line
+                                        key={`${note.id}-ledger-${ledgerStep}`}
+                                        x1={x - 16}
+                                        y1={ledgerY}
+                                        x2={x + 16}
+                                        y2={ledgerY}
+                                        stroke="#2d241c"
+                                        strokeWidth="1.5"
+                                    />
+                                );
+                            })}
+                            {hasSharp && (
+                                <text
+                                    x={x - 24}
+                                    y={y + 5}
+                                    fontSize="22"
+                                    fill="#2d241c"
+                                    fontFamily="Georgia, serif"
+                                >
+                                    #
+                                </text>
+                            )}
+                            <ellipse
+                                cx={x}
+                                cy={y}
+                                rx={headWidth / 2}
+                                ry={headHeight / 2}
+                                fill="#2d241c"
+                                transform={`rotate(-20 ${x} ${y})`}
+                            />
+                            <line
+                                x1={x + 7}
+                                y1={y}
+                                x2={x + 7}
+                                y2={y - 34}
+                                stroke="#2d241c"
+                                strokeWidth="1.5"
+                            />
+                            <text
+                                x={x}
+                                y={182}
+                                textAnchor="middle"
+                                fontSize="12"
+                                fill="#5f4631"
+                            >
+                                {formatNoteName(note.noteName)}
+                            </text>
+                        </g>
+                    );
+                })}
+
+                {notes.length === 0 && (
+                    <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="18" fill="#7b6657">
+                        Clicca una nota sulla tastiera per aggiungerla al pentagramma
+                    </text>
+                )}
+            </svg>
+        </div>
+    );
+}
+
 function GuitarFretboard() {
     const [hoveredNote, setHoveredNote] = React.useState(null);
-    const [selectedNote, setSelectedNote] = React.useState(null);
+    const [noteStack, setNoteStack] = React.useState([]);
     const [useItalianNotation, setUseItalianNotation] = React.useState(() => {
         // Carica la configurazione all'avvio
         const config = configRepository.load();
@@ -21,10 +183,6 @@ function GuitarFretboard() {
     const fretboardHeightLeft = 160; // Altezza a sinistra (meno stretta)
     const fretboardHeightRight = 200; // Altezza a destra (più larga)
     const openStringAreaWidth = 60; // Zona corde a vuoto senza tastiera sotto
-
-    // Note delle corde a vuoto (dal MI alto al MI basso - invertito)
-    const openStringNotes = ['E', 'B', 'G', 'D', 'A', 'E'];
-    const noteSequence = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
     // Mappa da notazione internazionale a italiana
     const noteToItalian = {
@@ -47,35 +205,19 @@ function GuitarFretboard() {
         return useItalianNotation ? noteToItalian[noteName] : noteName;
     };
 
-    // Calcola il nome della nota data la corda e il tasto
-    const getNoteName = (stringIndex, fret) => {
-        const openNote = openStringNotes[stringIndex];
-        const openNoteIndex = noteSequence.indexOf(openNote);
-        const noteIndex = (openNoteIndex + fret) % 12;
-        return noteSequence[noteIndex];
-    };
+    const addNoteToStack = (stringIndex, fret) => {
+        const midi = OPEN_STRING_MIDI[stringIndex] + fret;
+        const pitch = getPitchFromMidi(midi);
 
-    // Calcola la posizione Y della nota sul pentagramma
-    // Il pentagramma ha 5 linee, con spazi tra di esse
-    // Le linee sono a y: 30, 50, 70, 90, 110 (ogni 20px)
-    const getNotePositionOnStaff = (noteName) => {
-        // Mappa delle note alla loro posizione sul pentagramma (chiave di violino)
-        // Valori negativi = sopra il pentagramma, positivi = sotto
-        const notePositions = {
-            'C': 110,   // Do (sotto la prima linea)
-            'C#': 105,
-            'D': 100,   // Re (sulla prima linea)
-            'D#': 95,
-            'E': 90,    // Mi (tra prima e seconda linea)
-            'F': 85,    // Fa (sulla seconda linea)
-            'F#': 80,
-            'G': 70,    // Sol (terza linea)
-            'G#': 65,
-            'A': 60,    // La (tra terza e quarta)
-            'A#': 55,
-            'B': 50     // Si (quarta linea)
-        };
-        return notePositions[noteName] || 70;
+        setNoteStack((currentStack) => [
+            ...currentStack,
+            {
+                id: `${stringIndex}-${fret}-${Date.now()}-${currentStack.length}`,
+                string: stringIndex,
+                fret,
+                ...pitch
+            }
+        ]);
     };
 
     // Funzione per calcolare l'altezza in base alla posizione x
@@ -106,10 +248,10 @@ function GuitarFretboard() {
     };
 
     return (
-        <div style={{ margin: '20px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+        <div className="guitar-page">
+            <div className="fretboard-toolbar">
                 <h2 style={{ margin: 0 }}>Tastiera della Chitarra</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div className="notation-controls">
                     <span style={{ fontSize: '14px', fontWeight: '500' }}>Notazione:</span>
                     <label style={{
                         position: 'relative',
@@ -152,154 +294,157 @@ function GuitarFretboard() {
                     <span style={{ fontSize: '14px', minWidth: '150px' }}>
                         {useItalianNotation ? 'Italiana (Do, Re, Mi)' : 'Internazionale (C, D, E)'}
                     </span>
+                    <button
+                        type="button"
+                        onClick={() => setNoteStack([])}
+                        disabled={noteStack.length === 0}
+                        className="stack-button"
+                    >
+                        Svuota stack
+                    </button>
                 </div>
             </div>
-            <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg">
-                {/* Sfondo della tastiera a forma di trapezio */}
-                <polygon
-                    points={`${fretboardOffsetX},${(fretboardHeightRight - fretboardHeightLeft) / 2} 
-                             ${fretboardOffsetX},${(fretboardHeightRight + fretboardHeightLeft) / 2} 
-                             ${totalWidth},${fretboardHeightRight} 
-                             ${totalWidth},0`}
-                    fill="#8B4513"
-                    stroke="#654321"
-                    strokeWidth="3"
-                />
 
-                {/* Corde */}
-                {[...Array(strings)].map((_, i) => {
-                    const y1 = getStringY(i, 0);
-                    const y2 = getStringY(i, fretboardWidth);
-                    const thickness = 0.5 + i * 0.4; // Invertito: la prima corda è sottile, l'ultima grossa
-                    return (
-                        <line
-                            key={`string-${i}`}
-                            x1="0"
-                            y1={y1}
-                            x2={totalWidth}
-                            y2={y2}
-                            stroke="#C0C0C0"
-                            strokeWidth={thickness}
-                        />
-                    );
-                })}
+            <div className="fretboard-shell">
+                <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg">
+                    {/* Sfondo della tastiera a forma di trapezio */}
+                    <polygon
+                        points={`${fretboardOffsetX},${(fretboardHeightRight - fretboardHeightLeft) / 2} 
+                                 ${fretboardOffsetX},${(fretboardHeightRight + fretboardHeightLeft) / 2} 
+                                 ${totalWidth},${fretboardHeightRight} 
+                                 ${totalWidth},0`}
+                        fill="#8B4513"
+                        stroke="#654321"
+                        strokeWidth="3"
+                    />
 
-                {/* Tasti */}
-                {[...Array(frets + 1)].map((_, i) => {
-                    const x = fretboardOffsetX + getFretPosition(i);
-                    const heightAtX = getHeightAtX(getFretPosition(i), fretboardWidth);
-                    const yTop = (fretboardHeightRight - heightAtX) / 2;
-                    const yBottom = yTop + heightAtX;
-                    return (
-                        <line
-                            key={`fret-${i}`}
-                            x1={x}
-                            y1={yTop}
-                            x2={x}
-                            y2={yBottom}
-                            stroke="#D4AF37"
-                            strokeWidth={i === 0 ? "4" : "2"}
-                        />
-                    );
-                })}
-
-                {/* Marker dots sui tasti 3, 5, 7, 9, 15, 17, 19, 21 */}
-                {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => {
-                    const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
-                    const y = fretboardHeightRight / 2;
-                    return (
-                        <circle
-                            key={`dot-${fret}`}
-                            cx={x}
-                            cy={y}
-                            r="6"
-                            fill="#F5F5DC"
-                            opacity="0.7"
-                        />
-                    );
-                })}
-
-                {/* Due dots sul 12° e 24° tasto */}
-                {[12, 24].map(fret => {
-                    const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
-                    const y1 = fretboardHeightRight / 3;
-                    const y2 = (2 * fretboardHeightRight) / 3;
-                    return (
-                        <g key={`double-dot-${fret}`}>
-                            <circle cx={x} cy={y1} r="6" fill="#F5F5DC" opacity="0.7" />
-                            <circle cx={x} cy={y2} r="6" fill="#F5F5DC" opacity="0.7" />
-                        </g>
-                    );
-                })}
-
-                {/* Zone interattive per le note (incluso tasto 0 = corda a vuoto) */}
-                {[...Array(strings)].map((_, stringIndex) => (
-                    [...Array(frets + 1)].map((_, fretIndex) => {
-                        const fretNum = fretIndex;
-                        const x = fretNum === 0
-                            ? fretboardOffsetX / 2
-                            : fretboardOffsetX + (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
-                        const y = getStringY(stringIndex, Math.max(0, x - fretboardOffsetX));
-                        const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
-
+                    {/* Corde */}
+                    {[...Array(strings)].map((_, i) => {
+                        const y1 = getStringY(i, 0);
+                        const y2 = getStringY(i, fretboardWidth);
+                        const thickness = 0.5 + i * 0.4; // Invertito: la prima corda è sottile, l'ultima grossa
                         return (
-                            <g key={`note-${stringIndex}-${fretNum}`}>
-                                {/* Indicatore sempre visibile per la corda a vuoto */}
-                                {fretNum === 0 && (
-                                    <circle
-                                        cx={x}
-                                        cy={y}
-                                        r="8"
-                                        fill="#fff"
-                                        stroke="#222"
-                                        strokeWidth="2"
-                                        style={{ pointerEvents: 'none' }}
-                                    />
-                                )}
-                                {/* Area invisibile per il mouse hover */}
-                                <circle
-                                    cx={x}
-                                    cy={y}
-                                    r="20"
-                                    fill="transparent"
-                                    style={{ cursor: 'pointer' }}
-                                    onMouseEnter={() => setHoveredNote({ string: stringIndex, fret: fretNum })}
-                                    onMouseLeave={() => setHoveredNote(null)}
-                                    onClick={() => setSelectedNote({
-                                        string: stringIndex,
-                                        fret: fretNum,
-                                        note: getNoteName(stringIndex, fretNum)
-                                    })}
-                                />
-                                {/* Cerchietto giallo visibile solo in hover */}
-                                {isHovered && (
-                                    <circle
-                                        cx={x}
-                                        cy={y}
-                                        r="12"
-                                        fill="yellow"
-                                        stroke="orange"
-                                        strokeWidth="2"
-                                        style={{ pointerEvents: 'none' }}
-                                    />
-                                )}
+                            <line
+                                key={`string-${i}`}
+                                x1="0"
+                                y1={y1}
+                                x2={totalWidth}
+                                y2={y2}
+                                stroke="#C0C0C0"
+                                strokeWidth={thickness}
+                            />
+                        );
+                    })}
+
+                    {/* Tasti */}
+                    {[...Array(frets + 1)].map((_, i) => {
+                        const x = fretboardOffsetX + getFretPosition(i);
+                        const heightAtX = getHeightAtX(getFretPosition(i), fretboardWidth);
+                        const yTop = (fretboardHeightRight - heightAtX) / 2;
+                        const yBottom = yTop + heightAtX;
+                        return (
+                            <line
+                                key={`fret-${i}`}
+                                x1={x}
+                                y1={yTop}
+                                x2={x}
+                                y2={yBottom}
+                                stroke="#D4AF37"
+                                strokeWidth={i === 0 ? "4" : "2"}
+                            />
+                        );
+                    })}
+
+                    {/* Marker dots sui tasti 3, 5, 7, 9, 15, 17, 19, 21 */}
+                    {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => {
+                        const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
+                        const y = fretboardHeightRight / 2;
+                        return (
+                            <circle
+                                key={`dot-${fret}`}
+                                cx={x}
+                                cy={y}
+                                r="6"
+                                fill="#F5F5DC"
+                                opacity="0.7"
+                            />
+                        );
+                    })}
+
+                    {/* Due dots sul 12° e 24° tasto */}
+                    {[12, 24].map(fret => {
+                        const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
+                        const y1 = fretboardHeightRight / 3;
+                        const y2 = (2 * fretboardHeightRight) / 3;
+                        return (
+                            <g key={`double-dot-${fret}`}>
+                                <circle cx={x} cy={y1} r="6" fill="#F5F5DC" opacity="0.7" />
+                                <circle cx={x} cy={y2} r="6" fill="#F5F5DC" opacity="0.7" />
                             </g>
                         );
-                    })
-                ))}
-            </svg>
+                    })}
 
-            {/* Mostra la nota selezionata */}
-            {selectedNote && (
-                <div style={{
-                    marginTop: '20px',
-                    fontSize: '24px',
-                    fontWeight: 'bold',
-                    color: '#333'
-                }}>
-                    Nota: {formatNoteName(selectedNote.note)} (Corda {selectedNote.string + 1}, Tasto {selectedNote.fret})
+                    {/* Zone interattive per le note (incluso tasto 0 = corda a vuoto) */}
+                    {[...Array(strings)].map((_, stringIndex) => (
+                        [...Array(frets + 1)].map((_, fretIndex) => {
+                            const fretNum = fretIndex;
+                            const x = fretNum === 0
+                                ? fretboardOffsetX / 2
+                                : fretboardOffsetX + (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
+                            const y = getStringY(stringIndex, Math.max(0, x - fretboardOffsetX));
+                            const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
+
+                            return (
+                                <g key={`note-${stringIndex}-${fretNum}`}>
+                                    {/* Indicatore sempre visibile per la corda a vuoto */}
+                                    {fretNum === 0 && (
+                                        <circle
+                                            cx={x}
+                                            cy={y}
+                                            r="8"
+                                            fill="#fff"
+                                            stroke="#222"
+                                            strokeWidth="2"
+                                            style={{ pointerEvents: 'none' }}
+                                        />
+                                    )}
+                                    {/* Area invisibile per il mouse hover */}
+                                    <circle
+                                        cx={x}
+                                        cy={y}
+                                        r="20"
+                                        fill="transparent"
+                                        style={{ cursor: 'pointer' }}
+                                        onMouseEnter={() => setHoveredNote({ string: stringIndex, fret: fretNum })}
+                                        onMouseLeave={() => setHoveredNote(null)}
+                                        onClick={() => addNoteToStack(stringIndex, fretNum)}
+                                    />
+                                    {/* Cerchietto giallo visibile solo in hover */}
+                                    {isHovered && (
+                                        <circle
+                                            cx={x}
+                                            cy={y}
+                                            r="12"
+                                            fill="yellow"
+                                            stroke="orange"
+                                            strokeWidth="2"
+                                            style={{ pointerEvents: 'none' }}
+                                        />
+                                    )}
+                                </g>
+                            );
+                        })
+                    ))}
+                </svg>
+            </div>
+
+            {noteStack.length > 0 && (
+                <div className="selected-note-label">
+                    Ultima nota: {formatNoteName(noteStack[noteStack.length - 1].noteName)} (Corda {noteStack[noteStack.length - 1].string + 1}, Tasto {noteStack[noteStack.length - 1].fret})
                 </div>
             )}
+
+            <StaffNotation notes={noteStack} formatNoteName={formatNoteName} />
         </div>
     );
 }

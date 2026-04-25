@@ -3,11 +3,12 @@ import GuitarFretboard from './GuitarFretboard'
 
 function App() {
   return (
-    <>
-      <h1>guitar.simonegentili.com</h1>
-      <p>Welcome to the guitar simulator!</p>
+    <main className="app-shell">
+      <header className="app-hero">
+        <p className="app-eyebrow">guitar.simonegentili.com</p>
+      </header>
       <GuitarFretboard />
-    </>
+    </main>
   )
 }
 
