@@ -20,6 +20,7 @@ function GuitarFretboard() {
     const scaleLength = 1200;
     const fretboardHeightLeft = 160; // Altezza a sinistra (meno stretta)
     const fretboardHeightRight = 200; // Altezza a destra (più larga)
+    const openStringAreaWidth = 60; // Zona corde a vuoto senza tastiera sotto
 
     // Note delle corde a vuoto (dal MI alto al MI basso - invertito)
     const openStringNotes = ['E', 'B', 'G', 'D', 'A', 'E'];
@@ -92,6 +93,8 @@ function GuitarFretboard() {
 
     // Larghezza totale del fretboard basata sull'ultimo tasto
     const fretboardWidth = getFretPosition(frets) + 20;
+    const fretboardOffsetX = openStringAreaWidth;
+    const totalWidth = fretboardOffsetX + fretboardWidth;
 
     // Calcola la posizione Y di una corda dato l'indice e la posizione X
     const getStringY = (stringIndex, x) => {
@@ -108,10 +111,10 @@ function GuitarFretboard() {
                 <h2 style={{ margin: 0 }}>Tastiera della Chitarra</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '14px', fontWeight: '500' }}>Notazione:</span>
-                    <label style={{ 
-                        position: 'relative', 
-                        display: 'inline-block', 
-                        width: '60px', 
+                    <label style={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        width: '60px',
                         height: '34px',
                         cursor: 'pointer'
                     }}>
@@ -151,13 +154,13 @@ function GuitarFretboard() {
                     </span>
                 </div>
             </div>
-            <svg width={fretboardWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg">
+            <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg">
                 {/* Sfondo della tastiera a forma di trapezio */}
                 <polygon
-                    points={`0,${(fretboardHeightRight - fretboardHeightLeft) / 2} 
-                             0,${(fretboardHeightRight + fretboardHeightLeft) / 2} 
-                             ${fretboardWidth},${fretboardHeightRight} 
-                             ${fretboardWidth},0`}
+                    points={`${fretboardOffsetX},${(fretboardHeightRight - fretboardHeightLeft) / 2} 
+                             ${fretboardOffsetX},${(fretboardHeightRight + fretboardHeightLeft) / 2} 
+                             ${totalWidth},${fretboardHeightRight} 
+                             ${totalWidth},0`}
                     fill="#8B4513"
                     stroke="#654321"
                     strokeWidth="3"
@@ -165,16 +168,15 @@ function GuitarFretboard() {
 
                 {/* Corde */}
                 {[...Array(strings)].map((_, i) => {
-                    const ratio = (i + 1) / (strings + 1);
-                    const y1 = (fretboardHeightRight - fretboardHeightLeft) / 2 + ratio * fretboardHeightLeft;
-                    const y2 = ratio * fretboardHeightRight;
+                    const y1 = getStringY(i, 0);
+                    const y2 = getStringY(i, fretboardWidth);
                     const thickness = 0.5 + i * 0.4; // Invertito: la prima corda è sottile, l'ultima grossa
                     return (
                         <line
                             key={`string-${i}`}
                             x1="0"
                             y1={y1}
-                            x2={fretboardWidth}
+                            x2={totalWidth}
                             y2={y2}
                             stroke="#C0C0C0"
                             strokeWidth={thickness}
@@ -184,8 +186,8 @@ function GuitarFretboard() {
 
                 {/* Tasti */}
                 {[...Array(frets + 1)].map((_, i) => {
-                    const x = getFretPosition(i);
-                    const heightAtX = getHeightAtX(x, fretboardWidth);
+                    const x = fretboardOffsetX + getFretPosition(i);
+                    const heightAtX = getHeightAtX(getFretPosition(i), fretboardWidth);
                     const yTop = (fretboardHeightRight - heightAtX) / 2;
                     const yBottom = yTop + heightAtX;
                     return (
@@ -203,7 +205,7 @@ function GuitarFretboard() {
 
                 {/* Marker dots sui tasti 3, 5, 7, 9, 15, 17, 19, 21 */}
                 {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => {
-                    const x = (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
+                    const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
                     const y = fretboardHeightRight / 2;
                     return (
                         <circle
@@ -219,7 +221,7 @@ function GuitarFretboard() {
 
                 {/* Due dots sul 12° e 24° tasto */}
                 {[12, 24].map(fret => {
-                    const x = (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
+                    const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
                     const y1 = fretboardHeightRight / 3;
                     const y2 = (2 * fretboardHeightRight) / 3;
                     return (
@@ -230,16 +232,30 @@ function GuitarFretboard() {
                     );
                 })}
 
-                {/* Zone interattive per le note */}
+                {/* Zone interattive per le note (incluso tasto 0 = corda a vuoto) */}
                 {[...Array(strings)].map((_, stringIndex) => (
-                    [...Array(frets)].map((_, fretIndex) => {
-                        const fretNum = fretIndex + 1;
-                        const x = (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
-                        const y = getStringY(stringIndex, x);
+                    [...Array(frets + 1)].map((_, fretIndex) => {
+                        const fretNum = fretIndex;
+                        const x = fretNum === 0
+                            ? fretboardOffsetX / 2
+                            : fretboardOffsetX + (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
+                        const y = getStringY(stringIndex, Math.max(0, x - fretboardOffsetX));
                         const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
 
                         return (
                             <g key={`note-${stringIndex}-${fretNum}`}>
+                                {/* Indicatore sempre visibile per la corda a vuoto */}
+                                {fretNum === 0 && (
+                                    <circle
+                                        cx={x}
+                                        cy={y}
+                                        r="8"
+                                        fill="#fff"
+                                        stroke="#222"
+                                        strokeWidth="2"
+                                        style={{ pointerEvents: 'none' }}
+                                    />
+                                )}
                                 {/* Area invisibile per il mouse hover */}
                                 <circle
                                     cx={x}

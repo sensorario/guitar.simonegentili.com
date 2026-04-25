@@ -16,7 +16,7 @@ class ConfigRepository {
         } catch (error) {
             console.error('Errore nel caricamento della configurazione:', error);
         }
-        
+
         // Restituisce la configurazione di default se non c'è niente salvato
         return this.getDefaultConfig();
     }
