@@ -6,10 +6,10 @@ import configRepository from './repositories/ConfigRepository';
 const OPEN_STRING_MIDI = [64, 59, 55, 50, 45, 40];
 const NOTE_SEQUENCE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const ABC_NOTE_SEQUENCE = ['C', '^C', 'D', '^D', 'E', 'F', '^F', 'G', '^G', 'A', '^A', 'B'];
-const NOTES_PER_MEASURE = 4;
 const DEFAULT_MIN_MEASURES_PER_LINE = 2;
 const DEFAULT_MAX_MEASURES_PER_LINE = 4;
 const DEFAULT_INSTRUMENT = 'piano';
+const DEFAULT_NOTE_DURATION = 'quarter';
 const INSTRUMENT_OPTIONS = [
     { value: 'piano', label: 'Pianoforte' },
     { value: 'guitar', label: 'Chitarra' },
@@ -26,13 +26,24 @@ const INSTRUMENT_OPTIONS = [
     { value: 'membrane', label: 'Membrane' },
     { value: 'metal', label: 'Metal' }
 ];
+const DURATION_OPTIONS = [
+    { value: 'whole', label: 'Semibreve', beats: 4, abcUnits: 16, tone: '1n' },
+    { value: 'half', label: 'Minima', beats: 2, abcUnits: 8, tone: '2n' },
+    { value: 'quarter', label: 'Semiminima', beats: 1, abcUnits: 4, tone: '4n' },
+    { value: 'eighth', label: 'Croma', beats: 0.5, abcUnits: 2, tone: '8n' },
+    { value: 'sixteenth', label: 'Semicroma', beats: 0.25, abcUnits: 1, tone: '16n' }
+];
 
-const createPolyInstrument = (SynthClass, options, duration = '8n') => {
+const getDurationOption = (value) => {
+    return DURATION_OPTIONS.find((option) => option.value === value) ?? DURATION_OPTIONS[2];
+};
+
+const createPolyInstrument = (SynthClass, options, defaultDuration = '8n') => {
     const synth = new Tone.PolySynth(SynthClass, options).toDestination();
 
     return {
         synth,
-        playNote: (midi) => {
+        playNote: (midi, duration = defaultDuration) => {
             synth.triggerAttackRelease(Tone.Frequency(midi, 'midi').toNote(), duration);
         },
         stop: () => {
@@ -42,9 +53,9 @@ const createPolyInstrument = (SynthClass, options, duration = '8n') => {
     };
 };
 
-const createMonoInstrument = (synth, duration = '8n') => ({
+const createMonoInstrument = (synth, defaultDuration = '8n') => ({
     synth,
-    playNote: (midi) => {
+    playNote: (midi, duration = defaultDuration) => {
         synth.triggerAttackRelease(Tone.Frequency(midi, 'midi').toNote(), duration);
     },
     stop: () => {
@@ -218,9 +229,9 @@ const createInstrument = (instrument) => {
 
         return {
             synth,
-            playNote: (midi) => {
+            playNote: (midi, duration = '16n') => {
                 synth.frequency.value = Tone.Frequency(midi, 'midi').toFrequency();
-                synth.triggerAttackRelease('16n');
+                synth.triggerAttackRelease(duration);
             },
             stop: () => {
                 synth.dispose();
@@ -313,23 +324,47 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
         return [
             'X:1',
             'M:4/4',
-            'L:1/4',
+            'L:1/16',
             'K:C clef=treble',
-            '| z z z z |]'
+            '| z16 |]'
         ].join('\n');
     }
 
-    const abcNotes = visibleNotes.map((note) => getAbcPitchFromMidi(note.displayMidi));
+    const abcNotes = visibleNotes.map((note) => {
+        const durationOption = getDurationOption(note.duration);
+        const pitch = getAbcPitchFromMidi(note.displayMidi);
+        return {
+            value: durationOption.abcUnits === 1 ? pitch : `${pitch}${durationOption.abcUnits}`,
+            abcUnits: durationOption.abcUnits
+        };
+    });
     const measures = [];
+    let currentMeasure = [];
+    let currentUnits = 0;
 
-    for (let index = 0; index < abcNotes.length; index += NOTES_PER_MEASURE) {
-        const measureNotes = abcNotes.slice(index, index + NOTES_PER_MEASURE);
+    for (const abcNote of abcNotes) {
+        if (currentUnits + abcNote.abcUnits > 16) {
+            if (currentUnits < 16) {
+                const restUnits = 16 - currentUnits;
+                currentMeasure.push(restUnits === 1 ? 'z' : `z${restUnits}`);
+            }
 
-        while (measureNotes.length < NOTES_PER_MEASURE) {
-            measureNotes.push('z');
+            measures.push(currentMeasure.join(' '));
+            currentMeasure = [];
+            currentUnits = 0;
         }
 
-        measures.push(measureNotes.join(' '));
+        currentMeasure.push(abcNote.value);
+        currentUnits += abcNote.abcUnits;
+    }
+
+    if (currentMeasure.length > 0) {
+        if (currentUnits < 16) {
+            const restUnits = 16 - currentUnits;
+            currentMeasure.push(restUnits === 1 ? 'z' : `z${restUnits}`);
+        }
+
+        measures.push(currentMeasure.join(' '));
     }
 
     const sanitizedMin = clampToPositiveInteger(minMeasuresPerLine, DEFAULT_MIN_MEASURES_PER_LINE);
@@ -345,9 +380,8 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
 
     return [
         'X:1',
-        'T:Pentagramma Chitarra',
         'M:4/4',
-        'L:1/4',
+        'L:1/16',
         'K:C clef=treble',
         ...abcStaffLines
     ].join('\n');
@@ -366,8 +400,59 @@ function ToolbarIcon({ children }) {
     );
 }
 
-function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine }) {
+function DurationIcon({ duration, className = '' }) {
+    const classes = ['duration-icon', className].filter(Boolean).join(' ');
+    const strokeProps = {
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 1.7,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round'
+    };
+
+    return (
+        <svg viewBox="0 0 24 24" className={classes} aria-hidden="true" focusable="false">
+            {duration === 'whole' && (
+                <ellipse cx="12" cy="15.5" rx="5.8" ry="4.1" {...strokeProps} />
+            )}
+
+            {duration === 'half' && (
+                <>
+                    <ellipse cx="10" cy="16" rx="4.6" ry="3.2" {...strokeProps} />
+                    <path d="M14.2 15.2V4.5" {...strokeProps} />
+                </>
+            )}
+
+            {duration === 'quarter' && (
+                <>
+                    <ellipse cx="10" cy="16" rx="4.6" ry="3.2" fill="currentColor" transform="rotate(-18 10 16)" />
+                    <path d="M13.5 15.3V4.5" {...strokeProps} />
+                </>
+            )}
+
+            {duration === 'eighth' && (
+                <>
+                    <ellipse cx="9.5" cy="16" rx="4.4" ry="3.1" fill="currentColor" transform="rotate(-18 9.5 16)" />
+                    <path d="M13 15.2V4.4" {...strokeProps} />
+                    <path d="M13 4.6C15.8 5.2 17.5 6.7 17.6 9.2C16.4 8 15 7.3 13 7.4" {...strokeProps} />
+                </>
+            )}
+
+            {duration === 'sixteenth' && (
+                <>
+                    <ellipse cx="9.5" cy="16" rx="4.4" ry="3.1" fill="currentColor" transform="rotate(-18 9.5 16)" />
+                    <path d="M13 15.2V4.2" {...strokeProps} />
+                    <path d="M13 4.4C15.9 5 17.6 6.5 17.7 9C16.5 7.8 15.1 7.1 13 7.2" {...strokeProps} />
+                    <path d="M13 8.5C15.6 9.1 17.1 10.4 17.2 12.4C16.1 11.5 14.8 10.9 13 11" {...strokeProps} />
+                </>
+            )}
+        </svg>
+    );
+}
+
+function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration }) {
     const notationContainerRef = React.useRef(null);
+    const durationOption = React.useMemo(() => getDurationOption(noteDuration), [noteDuration]);
     const abcNotation = React.useMemo(
         () => buildAbcNotation(notes, minMeasuresPerLine, maxMeasuresPerLine),
         [notes, minMeasuresPerLine, maxMeasuresPerLine]
@@ -403,9 +488,11 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
             <p className="staff-panel__legend">
                 Mostrate {notes.length} note in battute da 4/4.
                 {' '}
+                Durata selezionata: {durationOption.label}.
+                {' '}
                 Range battute/riga: min {minMeasuresPerLine}, max {maxMeasuresPerLine}.
                 {' '}
-                {notes.length > 0 && `Ultima nota: ${formatNoteName(notes[notes.length - 1].noteName)}.`}
+                {notes.length > 0 && `Ultima nota: ${formatNoteName(notes[notes.length - 1].noteName)} (${getDurationOption(notes[notes.length - 1].duration).label}).`}
             </p>
         </div>
     );
@@ -416,6 +503,7 @@ function GuitarFretboard() {
     const [noteStack, setNoteStack] = React.useState([]);
     const [isPlaying, setIsPlaying] = React.useState(false);
     const [instrument, setInstrument] = React.useState(DEFAULT_INSTRUMENT);
+    const [noteDuration, setNoteDuration] = React.useState(DEFAULT_NOTE_DURATION);
     const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
     const synthRef = React.useRef(null);
@@ -491,6 +579,7 @@ function GuitarFretboard() {
     const addNoteToStack = (stringIndex, fret) => {
         const midi = OPEN_STRING_MIDI[stringIndex] + fret;
         const pitch = getPitchFromMidi(midi);
+        const duration = noteDuration;
 
         setNoteStack((currentStack) => [
             ...currentStack,
@@ -498,6 +587,7 @@ function GuitarFretboard() {
                 id: `${stringIndex}-${fret}-${Date.now()}-${currentStack.length}`,
                 string: stringIndex,
                 fret,
+                duration,
                 ...pitch
             }
         ]);
@@ -539,8 +629,9 @@ function GuitarFretboard() {
                     break;
                 }
 
-                synthRef.current.playNote(note.displayMidi);
-                await new Promise((resolve) => window.setTimeout(resolve, msPerQuarter));
+                const durationOption = getDurationOption(note.duration);
+                synthRef.current.playNote(note.displayMidi, durationOption.tone);
+                await new Promise((resolve) => window.setTimeout(resolve, msPerQuarter * durationOption.beats));
             }
         } finally {
             playbackActiveRef.current = false;
@@ -577,51 +668,29 @@ function GuitarFretboard() {
 
     return (
         <div className="guitar-page">
-            <div className="fretboard-toolbar">
-                <div className="notation-controls">
-                    <span style={{ fontSize: '14px', fontWeight: '500' }}>Notazione:</span>
-                    <label style={{
-                        position: 'relative',
-                        display: 'inline-block',
-                        width: '60px',
-                        height: '34px',
-                        cursor: 'pointer'
-                    }}>
+            <div className="fretboard-toolbar editor-toolbar">
+                <div className="editor-toolbar__group editor-toolbar__group--notation">
+                    <span className="editor-toolbar__label">Notazione</span>
+                    <label className="editor-toggle">
                         <input
                             type="checkbox"
                             checked={useItalianNotation}
                             onChange={(e) => setUseItalianNotation(e.target.checked)}
-                            style={{ opacity: 0, width: 0, height: 0 }}
+                            className="editor-toggle__input"
                         />
-                        <span style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: useItalianNotation ? '#4CAF50' : '#ccc',
-                            borderRadius: '34px',
-                            transition: 'background-color 0.3s',
-                            cursor: 'pointer'
-                        }}>
-                            <span style={{
-                                position: 'absolute',
-                                content: '',
-                                height: '26px',
-                                width: '26px',
-                                left: useItalianNotation ? '30px' : '4px',
-                                bottom: '4px',
-                                backgroundColor: 'white',
-                                borderRadius: '50%',
-                                transition: 'left 0.3s',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                            }}></span>
+                        <span className="editor-toggle__track">
+                            <span className="editor-toggle__thumb"></span>
                         </span>
                     </label>
-                    <span style={{ fontSize: '14px', minWidth: '150px' }}>
+                    <span className="editor-toolbar__value">
                         {useItalianNotation ? 'Italiana (Do, Re, Mi)' : 'Internazionale (C, D, E)'}
                     </span>
-                    <label className="instrument-control">
+                </div>
+
+                <span className="editor-toolbar__divider" aria-hidden="true"></span>
+
+                <div className="editor-toolbar__group">
+                    <label className="instrument-control editor-toolbar__field">
                         Strumento
                         <select
                             value={instrument}
@@ -635,28 +704,54 @@ function GuitarFretboard() {
                             ))}
                         </select>
                     </label>
-                    <div className="measure-controls">
-                        <label>
-                            Min battute/riga
-                            <input
-                                type="number"
-                                min="1"
-                                max="12"
-                                value={minMeasuresPerLine}
-                                onChange={handleMinMeasuresChange}
-                            />
-                        </label>
-                        <label>
-                            Max battute/riga
-                            <input
-                                type="number"
-                                min={minMeasuresPerLine}
-                                max="12"
-                                value={maxMeasuresPerLine}
-                                onChange={handleMaxMeasuresChange}
-                            />
-                        </label>
+                    <div className="instrument-control editor-toolbar__field duration-picker" role="group" aria-label="Durata note">
+                        <span>Durata</span>
+                        <div className="duration-picker__options">
+                            {DURATION_OPTIONS.map((option) => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    className={`duration-picker__button${noteDuration === option.value ? ' duration-picker__button--active' : ''}`}
+                                    onClick={() => setNoteDuration(option.value)}
+                                    disabled={isPlaying}
+                                    aria-label={option.label}
+                                    title={option.label}
+                                >
+                                    <DurationIcon duration={option.value} />
+                                </button>
+                            ))}
+                        </div>
                     </div>
+                </div>
+
+                <span className="editor-toolbar__divider" aria-hidden="true"></span>
+
+                <div className="measure-controls editor-toolbar__group">
+                    <label>
+                        Min battute/riga
+                        <input
+                            type="number"
+                            min="1"
+                            max="12"
+                            value={minMeasuresPerLine}
+                            onChange={handleMinMeasuresChange}
+                        />
+                    </label>
+                    <label>
+                        Max battute/riga
+                        <input
+                            type="number"
+                            min={minMeasuresPerLine}
+                            max="12"
+                            value={maxMeasuresPerLine}
+                            onChange={handleMaxMeasuresChange}
+                        />
+                    </label>
+                </div>
+
+                <span className="editor-toolbar__divider" aria-hidden="true"></span>
+
+                <div className="editor-toolbar__actions">
                     <button
                         type="button"
                         onClick={removeLastNoteFromStack}
@@ -906,6 +1001,7 @@ function GuitarFretboard() {
                 formatNoteName={formatNoteName}
                 minMeasuresPerLine={minMeasuresPerLine}
                 maxMeasuresPerLine={maxMeasuresPerLine}
+                noteDuration={noteDuration}
             />
         </div>
     );
