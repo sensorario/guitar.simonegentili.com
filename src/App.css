@@ -325,9 +325,37 @@
   color: #5e2b24;
 }
 
+.stack-button--danger {
+  background: #f9e8e6;
+  color: #7a2a22;
+  border-color: rgba(150, 50, 40, 0.18);
+}
+
+.stack-button--danger:hover:not(:disabled) {
+  background: #f5d0cb;
+}
+
 .stack-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.song-select {
+  height: 34px;
+  padding: 0 0.5em;
+  border: 1px solid rgba(79, 56, 34, 0.2);
+  border-radius: 6px;
+  background: #fdf7ee;
+  color: #3b2817;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.song-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .playback-button:disabled {
@@ -346,7 +374,6 @@
   padding: 12px;
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(75, 46, 19, 0.1), rgba(75, 46, 19, 0.02));
-  margin: auto;
 }
 
 .fretboard-svg {
@@ -389,5 +416,28 @@
   .staff-panel__header {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .staff-panel,
+  .staff-panel * {
+    visibility: visible;
+  }
+
+  .staff-panel {
+    position: fixed;
+    inset: 0;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 24px;
+  }
+
+  .staff-panel__header {
+    display: none;
   }
 }

@@ -34,6 +34,7 @@ const DURATION_OPTIONS = [
     { value: 'sixteenth', label: 'Semicroma', beats: 0.25, abcUnits: 1, tone: '16n' }
 ];
 const REST_OPTIONS = DURATION_OPTIONS;
+const SONGS_STORAGE_KEY = 'guitar-songs';
 
 const getDurationOption = (value) => {
     return DURATION_OPTIONS.find((option) => option.value === value) ?? DURATION_OPTIONS[2];
@@ -554,6 +555,14 @@ function GuitarFretboard() {
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
     const synthRef = React.useRef(null);
     const playbackActiveRef = React.useRef(false);
+    const [savedSongs, setSavedSongs] = React.useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem(SONGS_STORAGE_KEY) ?? '{}');
+        } catch {
+            return {};
+        }
+    });
+    const [selectedSong, setSelectedSong] = React.useState('');
     const [useItalianNotation, setUseItalianNotation] = React.useState(() => {
         // Carica la configurazione all'avvio
         const config = configRepository.load();
@@ -652,6 +661,39 @@ function GuitarFretboard() {
 
     const removeLastNoteFromStack = () => {
         setNoteStack((currentStack) => currentStack.slice(0, -1));
+    };
+
+    const saveSong = () => {
+        const name = window.prompt('Nome della canzone:', selectedSong || '');
+        if (!name || name.trim() === '') return;
+        const trimmed = name.trim();
+        const updated = { ...savedSongs, [trimmed]: noteStack };
+        try {
+            localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(updated));
+        } catch {
+            // storage full — silently ignore
+        }
+        setSavedSongs(updated);
+        setSelectedSong(trimmed);
+    };
+
+    const loadSong = (name) => {
+        if (!name || !savedSongs[name]) return;
+        setNoteStack(savedSongs[name]);
+        setSelectedSong(name);
+    };
+
+    const deleteSong = () => {
+        if (!selectedSong || !savedSongs[selectedSong]) return;
+        const updated = { ...savedSongs };
+        delete updated[selectedSong];
+        try {
+            localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(updated));
+        } catch {
+            // ignore
+        }
+        setSavedSongs(updated);
+        setSelectedSong('');
     };
 
     const stopPlayback = React.useCallback(() => {
@@ -828,6 +870,50 @@ function GuitarFretboard() {
 
                 <span className="editor-toolbar__divider" aria-hidden="true"></span>
 
+                <div className="editor-toolbar__group editor-toolbar__group--songs">
+                    <select
+                        className="song-select"
+                        value={selectedSong}
+                        onChange={(e) => loadSong(e.target.value)}
+                        disabled={isPlaying || Object.keys(savedSongs).length === 0}
+                        aria-label="Carica canzone"
+                        title="Carica canzone salvata"
+                    >
+                        <option value="">-- Canzoni salvate --</option>
+                        {Object.keys(savedSongs).map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                    </select>
+                    <button
+                        type="button"
+                        onClick={saveSong}
+                        disabled={noteStack.length === 0 || isPlaying}
+                        className="stack-button"
+                        aria-label="Salva canzone"
+                        title="Salva canzone"
+                    >
+                        <ToolbarIcon>
+                            <path d="M4 4h13l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4zm5 14h6v-5H9v5zM8 4v5h8V4H8z" fill="currentColor" />
+                        </ToolbarIcon>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={deleteSong}
+                        disabled={isPlaying || !selectedSong || !savedSongs[selectedSong]}
+                        className="stack-button stack-button--danger"
+                        aria-label="Elimina canzone salvata"
+                        title="Elimina canzone salvata"
+                    >
+                        <ToolbarIcon>
+                            <path d="M4 7H20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M9 7V5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M7 7L8 19C8.08911 20.0681 8.9822 20.8889 10.054 20.8889H13.946C15.0178 20.8889 15.9109 20.0681 16 19L17 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </ToolbarIcon>
+                    </button>
+                </div>
+
+                <span className="editor-toolbar__divider" aria-hidden="true"></span>
+
                 <div className="editor-toolbar__actions">
                     <button
                         type="button"
@@ -929,6 +1015,18 @@ function GuitarFretboard() {
                     >
                         <ToolbarIcon>
                             <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+                        </ToolbarIcon>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => window.print()}
+                        disabled={noteStack.length === 0}
+                        className="stack-button"
+                        aria-label="Stampa spartito"
+                        title="Stampa spartito"
+                    >
+                        <ToolbarIcon>
+                            <path d="M6 2h12v5H6zM4 8h16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3v3H7v-3H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm3 9v3h10v-3H7zm-3-2h1.5a1 1 0 1 0 0-2H4v2z" fill="currentColor" />
                         </ToolbarIcon>
                     </button>
                 </div>
