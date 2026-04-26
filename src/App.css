@@ -79,6 +79,16 @@
   display: block;
 }
 
+.abcjs-note {
+  cursor: pointer;
+}
+
+.abcjs-note:hover path,
+.abcjs-note:hover ellipse,
+.abcjs-note:hover rect {
+  filter: drop-shadow(0 0 3px rgba(76, 175, 80, 0.9));
+}
+
 .fretboard-toolbar {
   display: flex;
   align-items: center;

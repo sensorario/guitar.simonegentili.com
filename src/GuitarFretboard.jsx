@@ -1,5 +1,4 @@
 import React from 'react';
-import abcjs from 'abcjs';
 import * as Tone from 'tone';
 import configRepository from './repositories/ConfigRepository';
 
@@ -500,29 +499,49 @@ function RestIcon({ duration, className = '' }) {
     );
 }
 
-function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration }) {
+function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration, onNoteHover }) {
     const notationContainerRef = React.useRef(null);
     const durationOption = React.useMemo(() => getDurationOption(noteDuration), [noteDuration]);
     const abcNotation = React.useMemo(
         () => buildAbcNotation(notes, minMeasuresPerLine, maxMeasuresPerLine),
         [notes, minMeasuresPerLine, maxMeasuresPerLine]
     );
+    // noteOnly: stack items that are pitched notes (not rests)
+    const noteOnlyStack = React.useMemo(() => notes.filter((n) => !n.isRest), [notes]);
 
     React.useEffect(() => {
         if (!notationContainerRef.current) {
             return;
         }
 
-        abcjs.renderAbc(notationContainerRef.current, abcNotation, {
-            responsive: 'resize',
-            staffwidth: 920,
-            add_classes: true,
-            wrap: {
-                minSpacing: 1.8,
-                maxSpacing: 2.8
-            }
+        let cancelled = false;
+        import('abcjs').then(({ default: abcjs }) => {
+            if (cancelled || !notationContainerRef.current) return;
+
+            abcjs.renderAbc(notationContainerRef.current, abcNotation, {
+                responsive: 'resize',
+                staffwidth: 920,
+                add_classes: true,
+                wrap: {
+                    minSpacing: 1.8,
+                    maxSpacing: 2.8
+                }
+            });
+
+            // Attach hover listeners to rendered note elements
+            const noteEls = notationContainerRef.current.querySelectorAll('.abcjs-note');
+            noteEls.forEach((el, i) => {
+                const stackNote = noteOnlyStack[i];
+                if (!stackNote) return;
+                const handler = () => onNoteHover?.(stackNote.displayMidi);
+                const clearHandler = () => onNoteHover?.(null);
+                el.addEventListener('mouseenter', handler);
+                el.addEventListener('mouseleave', clearHandler);
+            });
         });
-    }, [abcNotation]);
+
+        return () => { cancelled = true; };
+    }, [abcNotation, noteOnlyStack, onNoteHover]);
 
     return (
         <div className="staff-panel">
@@ -547,6 +566,7 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
 
 function GuitarFretboard() {
     const [hoveredNote, setHoveredNote] = React.useState(null);
+    const [hoveredStaffMidi, setHoveredStaffMidi] = React.useState(null);
     const [noteStack, setNoteStack] = React.useState([]);
     const [isPlaying, setIsPlaying] = React.useState(false);
     const [instrument, setInstrument] = React.useState(DEFAULT_INSTRUMENT);
@@ -1123,7 +1143,9 @@ function GuitarFretboard() {
                                 ? OPEN_STRING_MIDI[hoveredNote.string] + hoveredNote.fret
                                 : null;
                             const thisMidi = OPEN_STRING_MIDI[stringIndex] + fretNum;
-                            const isSameNote = hoveredMidi != null && !isHovered && (thisMidi % 12) === (hoveredMidi % 12);
+                            const activeMidi = hoveredMidi ?? hoveredStaffMidi;
+                            const isSameNote = activeMidi != null && !isHovered && (thisMidi % 12) === (activeMidi % 12);
+                            const isStaffExactMatch = hoveredStaffMidi != null && hoveredNote == null && thisMidi === hoveredStaffMidi;
 
                             return (
                                 <g key={`note-${stringIndex}-${fretNum}`}>
@@ -1150,7 +1172,7 @@ function GuitarFretboard() {
                                         onMouseLeave={() => setHoveredNote(null)}
                                         onClick={() => addNoteToStack(stringIndex, fretNum)}
                                     />
-                                    {/* Cerchietto giallo visibile solo in hover */}
+                                    {/* Cerchietto giallo visibile solo in hover diretto */}
                                     {isHovered && (
                                         <circle
                                             cx={x}
@@ -1162,8 +1184,21 @@ function GuitarFretboard() {
                                             style={{ pointerEvents: 'none' }}
                                         />
                                     )}
+                                    {/* Cerchietto verde per la posizione esatta evidenziata dal pentagramma */}
+                                    {isStaffExactMatch && (
+                                        <circle
+                                            cx={x}
+                                            cy={y}
+                                            r="13"
+                                            fill="#4caf50"
+                                            fillOpacity="0.7"
+                                            stroke="#2e7d32"
+                                            strokeWidth="2"
+                                            style={{ pointerEvents: 'none' }}
+                                        />
+                                    )}
                                     {/* Cerchietto arancione tenue per le note uguali (stessa classe) */}
-                                    {isSameNote && (
+                                    {isSameNote && !isStaffExactMatch && (
                                         <circle
                                             cx={x}
                                             cy={y}
@@ -1196,6 +1231,7 @@ function GuitarFretboard() {
                 minMeasuresPerLine={minMeasuresPerLine}
                 maxMeasuresPerLine={maxMeasuresPerLine}
                 noteDuration={noteDuration}
+                onNoteHover={setHoveredStaffMidi}
             />
         </div>
     );
