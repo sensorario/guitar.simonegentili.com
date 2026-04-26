@@ -124,7 +124,7 @@
 }
 
 .editor-toolbar__value {
-  min-width: 170px;
+  min-width: 80px;
   font-size: 0.9rem;
   color: #4a3b2e;
 }
@@ -242,6 +242,19 @@
   border-color: rgba(66, 118, 82, 0.45);
   background: #eaf4ec;
   color: #295034;
+}
+
+.rest-picker {
+  gap: 10px;
+}
+
+.rest-picker__button {
+  color: #6a4d38;
+}
+
+.rest-picker__button:hover:not(:disabled) {
+  border-color: rgba(106, 77, 56, 0.34);
+  background: #fff8f0;
 }
 
 .duration-picker__button:disabled {

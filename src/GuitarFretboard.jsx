@@ -33,9 +33,20 @@ const DURATION_OPTIONS = [
     { value: 'eighth', label: 'Croma', beats: 0.5, abcUnits: 2, tone: '8n' },
     { value: 'sixteenth', label: 'Semicroma', beats: 0.25, abcUnits: 1, tone: '16n' }
 ];
+const REST_OPTIONS = DURATION_OPTIONS;
 
 const getDurationOption = (value) => {
     return DURATION_OPTIONS.find((option) => option.value === value) ?? DURATION_OPTIONS[2];
+};
+
+const getStackItemLabel = (item, formatNoteName) => {
+    const durationLabel = getDurationOption(item.duration).label;
+
+    if (item.isRest) {
+        return `Pausa (${durationLabel})`;
+    }
+
+    return `${formatNoteName(item.noteName)} (${durationLabel})`;
 };
 
 const createPolyInstrument = (SynthClass, options, defaultDuration = '8n') => {
@@ -332,7 +343,7 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
 
     const abcNotes = visibleNotes.map((note) => {
         const durationOption = getDurationOption(note.duration);
-        const pitch = getAbcPitchFromMidi(note.displayMidi);
+        const pitch = note.isRest ? 'z' : getAbcPitchFromMidi(note.displayMidi);
         return {
             value: durationOption.abcUnits === 1 ? pitch : `${pitch}${durationOption.abcUnits}`,
             abcUnits: durationOption.abcUnits
@@ -450,6 +461,44 @@ function DurationIcon({ duration, className = '' }) {
     );
 }
 
+function RestIcon({ duration, className = '' }) {
+    const classes = ['duration-icon', className].filter(Boolean).join(' ');
+    const strokeProps = {
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 1.7,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round'
+    };
+
+    return (
+        <svg viewBox="0 0 24 24" className={classes} aria-hidden="true" focusable="false">
+            {duration === 'whole' && <rect x="6" y="9" width="12" height="4" rx="0.8" fill="currentColor" />}
+
+            {duration === 'half' && <rect x="6" y="13" width="12" height="4" rx="0.8" fill="currentColor" />}
+
+            {duration === 'quarter' && (
+                <path d="M12 4C15 6.1 15.4 8.4 12.8 10.4C15.7 11.8 15.9 14.3 12 16.1C15 17.3 15.4 19 12.5 20" {...strokeProps} />
+            )}
+
+            {duration === 'eighth' && (
+                <>
+                    <path d="M10.5 5.5C13.4 7.4 13.6 9.4 11.1 11.2C13.6 12.5 13.7 14.2 10.8 15.5" {...strokeProps} />
+                    <path d="M13.3 15.4C15.1 16.1 16.5 17.4 17.5 19.4" {...strokeProps} />
+                </>
+            )}
+
+            {duration === 'sixteenth' && (
+                <>
+                    <path d="M10.5 4.8C13.5 6.7 13.7 8.7 11.1 10.5C13.8 11.8 13.9 13.6 10.8 14.9" {...strokeProps} />
+                    <path d="M13.6 14.7C15.7 15.6 17 17 17.6 18.6" {...strokeProps} />
+                    <path d="M11.7 12.1C13.8 13 15.1 14.3 15.7 16" {...strokeProps} />
+                </>
+            )}
+        </svg>
+    );
+}
+
 function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration }) {
     const notationContainerRef = React.useRef(null);
     const durationOption = React.useMemo(() => getDurationOption(noteDuration), [noteDuration]);
@@ -476,9 +525,6 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
 
     return (
         <div className="staff-panel">
-            <div className="staff-panel__header">
-                <span>{notes.length} note nello stack</span>
-            </div>
             <div
                 ref={notationContainerRef}
                 className="staff-panel__score"
@@ -492,7 +538,7 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
                 {' '}
                 Range battute/riga: min {minMeasuresPerLine}, max {maxMeasuresPerLine}.
                 {' '}
-                {notes.length > 0 && `Ultima nota: ${formatNoteName(notes[notes.length - 1].noteName)} (${getDurationOption(notes[notes.length - 1].duration).label}).`}
+                {notes.length > 0 && `Ultimo elemento: ${getStackItemLabel(notes[notes.length - 1], formatNoteName)}.`}
             </p>
         </div>
     );
@@ -593,6 +639,17 @@ function GuitarFretboard() {
         ]);
     };
 
+    const addRestToStack = (duration) => {
+        setNoteStack((currentStack) => [
+            ...currentStack,
+            {
+                id: `rest-${duration}-${Date.now()}-${currentStack.length}`,
+                isRest: true,
+                duration
+            }
+        ]);
+    };
+
     const removeLastNoteFromStack = () => {
         setNoteStack((currentStack) => currentStack.slice(0, -1));
     };
@@ -630,7 +687,9 @@ function GuitarFretboard() {
                 }
 
                 const durationOption = getDurationOption(note.duration);
-                synthRef.current.playNote(note.displayMidi, durationOption.tone);
+                if (!note.isRest) {
+                    synthRef.current.playNote(note.displayMidi, durationOption.tone);
+                }
                 await new Promise((resolve) => window.setTimeout(resolve, msPerQuarter * durationOption.beats));
             }
         } finally {
@@ -683,7 +742,7 @@ function GuitarFretboard() {
                         </span>
                     </label>
                     <span className="editor-toolbar__value">
-                        {useItalianNotation ? 'Italiana (Do, Re, Mi)' : 'Internazionale (C, D, E)'}
+                        {useItalianNotation ? '(Do, Re, Mi)' : '(C, D, E)'}
                     </span>
                 </div>
 
@@ -718,6 +777,24 @@ function GuitarFretboard() {
                                     title={option.label}
                                 >
                                     <DurationIcon duration={option.value} />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="instrument-control editor-toolbar__field duration-picker rest-picker" role="group" aria-label="Pause">
+                        <span>Pause</span>
+                        <div className="duration-picker__options">
+                            {REST_OPTIONS.map((option) => (
+                                <button
+                                    key={`rest-${option.value}`}
+                                    type="button"
+                                    className="duration-picker__button rest-picker__button"
+                                    onClick={() => addRestToStack(option.value)}
+                                    disabled={isPlaying}
+                                    aria-label={`Aggiungi pausa ${option.label}`}
+                                    title={`Aggiungi pausa ${option.label}`}
+                                >
+                                    <RestIcon duration={option.value} />
                                 </button>
                             ))}
                         </div>
@@ -992,7 +1069,9 @@ function GuitarFretboard() {
 
             {noteStack.length > 0 && (
                 <div className="selected-note-label">
-                    Ultima nota: {formatNoteName(noteStack[noteStack.length - 1].noteName)} (Corda {noteStack[noteStack.length - 1].string + 1}, Tasto {noteStack[noteStack.length - 1].fret})
+                    {noteStack[noteStack.length - 1].isRest
+                        ? `Ultimo elemento: ${getStackItemLabel(noteStack[noteStack.length - 1], formatNoteName)}`
+                        : `Ultima nota: ${formatNoteName(noteStack[noteStack.length - 1].noteName)} (${getDurationOption(noteStack[noteStack.length - 1].duration).label}) (Corda ${noteStack[noteStack.length - 1].string + 1}, Tasto ${noteStack[noteStack.length - 1].fret})`}
                 </div>
             )}
 
