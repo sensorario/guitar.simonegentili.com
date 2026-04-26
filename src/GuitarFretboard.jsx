@@ -1,5 +1,6 @@
 import React from 'react';
 import abcjs from 'abcjs';
+import * as Tone from 'tone';
 import configRepository from './repositories/ConfigRepository';
 
 const OPEN_STRING_MIDI = [64, 59, 55, 50, 45, 40];
@@ -8,6 +9,238 @@ const ABC_NOTE_SEQUENCE = ['C', '^C', 'D', '^D', 'E', 'F', '^F', 'G', '^G', 'A',
 const NOTES_PER_MEASURE = 4;
 const DEFAULT_MIN_MEASURES_PER_LINE = 2;
 const DEFAULT_MAX_MEASURES_PER_LINE = 4;
+const DEFAULT_INSTRUMENT = 'piano';
+const INSTRUMENT_OPTIONS = [
+    { value: 'piano', label: 'Pianoforte' },
+    { value: 'guitar', label: 'Chitarra' },
+    { value: 'bass', label: 'Basso' },
+    { value: 'organ', label: 'Organo' },
+    { value: 'synth', label: 'Synth' },
+    { value: 'lead', label: 'Lead' },
+    { value: 'pad', label: 'Pad' },
+    { value: 'strings', label: 'Strings' },
+    { value: 'brass', label: 'Brass' },
+    { value: 'bell', label: 'Bell' },
+    { value: 'marimba', label: 'Marimba' },
+    { value: 'duo', label: 'Duo Synth' },
+    { value: 'membrane', label: 'Membrane' },
+    { value: 'metal', label: 'Metal' }
+];
+
+const createPolyInstrument = (SynthClass, options, duration = '8n') => {
+    const synth = new Tone.PolySynth(SynthClass, options).toDestination();
+
+    return {
+        synth,
+        playNote: (midi) => {
+            synth.triggerAttackRelease(Tone.Frequency(midi, 'midi').toNote(), duration);
+        },
+        stop: () => {
+            synth.releaseAll();
+            synth.dispose();
+        }
+    };
+};
+
+const createMonoInstrument = (synth, duration = '8n') => ({
+    synth,
+    playNote: (midi) => {
+        synth.triggerAttackRelease(Tone.Frequency(midi, 'midi').toNote(), duration);
+    },
+    stop: () => {
+        if (typeof synth.triggerRelease === 'function') {
+            synth.triggerRelease();
+        }
+
+        synth.dispose();
+    }
+});
+
+const createInstrument = (instrument) => {
+    if (instrument === 'guitar') {
+        const synth = new Tone.PluckSynth({
+            attackNoise: 1.1,
+            dampening: 2600,
+            resonance: 0.96,
+            release: 0.9
+        }).toDestination();
+
+        return {
+            synth,
+            playNote: (midi) => {
+                synth.triggerAttack(Tone.Frequency(midi, 'midi').toNote());
+            },
+            stop: () => {
+                synth.dispose();
+            }
+        };
+    }
+
+    if (instrument === 'bass') {
+        return createMonoInstrument(new Tone.MonoSynth({
+            volume: -6,
+            oscillator: { type: 'fatsquare' },
+            filter: { Q: 2, type: 'lowpass', rolloff: -24 },
+            envelope: { attack: 0.03, decay: 0.25, sustain: 0.4, release: 0.7 },
+            filterEnvelope: {
+                attack: 0.02,
+                decay: 0.2,
+                sustain: 0.5,
+                release: 0.8,
+                baseFrequency: 90,
+                octaves: 2.6
+            }
+        }).toDestination(), '8n');
+    }
+
+    if (instrument === 'organ') {
+        return createPolyInstrument(Tone.AMSynth, {
+            volume: -10,
+            harmonicity: 3,
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.02, decay: 0.1, sustain: 0.95, release: 0.4 },
+            modulation: { type: 'square' },
+            modulationEnvelope: { attack: 0.02, decay: 0.05, sustain: 1, release: 0.3 }
+        }, '4n');
+    }
+
+    if (instrument === 'synth') {
+        return createPolyInstrument(Tone.FMSynth, {
+            volume: -9,
+            harmonicity: 1.5,
+            modulationIndex: 7,
+            oscillator: { type: 'sawtooth' },
+            envelope: { attack: 0.03, decay: 0.18, sustain: 0.45, release: 0.5 },
+            modulation: { type: 'triangle' },
+            modulationEnvelope: { attack: 0.05, decay: 0.15, sustain: 0.3, release: 0.4 }
+        });
+    }
+
+    if (instrument === 'lead') {
+        return createMonoInstrument(new Tone.Synth({
+            volume: -8,
+            oscillator: { type: 'fatsawtooth', count: 3, spread: 20 },
+            envelope: { attack: 0.01, decay: 0.12, sustain: 0.35, release: 0.2 }
+        }).toDestination(), '8n');
+    }
+
+    if (instrument === 'pad') {
+        return createPolyInstrument(Tone.Synth, {
+            volume: -12,
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.2, decay: 0.4, sustain: 0.85, release: 1.6 }
+        }, '2n');
+    }
+
+    if (instrument === 'strings') {
+        return createPolyInstrument(Tone.Synth, {
+            volume: -10,
+            oscillator: { type: 'fattriangle', count: 3, spread: 18 },
+            envelope: { attack: 0.08, decay: 0.25, sustain: 0.7, release: 1.1 }
+        }, '4n');
+    }
+
+    if (instrument === 'brass') {
+        return createMonoInstrument(new Tone.MonoSynth({
+            volume: -9,
+            oscillator: { type: 'sawtooth' },
+            envelope: { attack: 0.04, decay: 0.14, sustain: 0.6, release: 0.35 },
+            filterEnvelope: {
+                attack: 0.03,
+                decay: 0.12,
+                sustain: 0.45,
+                release: 0.3,
+                baseFrequency: 200,
+                octaves: 3
+            }
+        }).toDestination(), '8n');
+    }
+
+    if (instrument === 'bell') {
+        return createMonoInstrument(new Tone.FMSynth({
+            volume: -12,
+            harmonicity: 8,
+            modulationIndex: 12,
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.001, decay: 1.2, sustain: 0, release: 1.4 },
+            modulation: { type: 'square' },
+            modulationEnvelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.8 }
+        }).toDestination(), '8n');
+    }
+
+    if (instrument === 'marimba') {
+        return createMonoInstrument(new Tone.MembraneSynth({
+            volume: -10,
+            pitchDecay: 0.01,
+            octaves: 2,
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.2 }
+        }).toDestination(), '16n');
+    }
+
+    if (instrument === 'duo') {
+        return createMonoInstrument(new Tone.DuoSynth({
+            volume: -10,
+            harmonicity: 1.5,
+            vibratoAmount: 0.3,
+            vibratoRate: 4,
+            voice0: {
+                oscillator: { type: 'sawtooth' },
+                envelope: { attack: 0.01, decay: 0.15, sustain: 0.5, release: 0.4 }
+            },
+            voice1: {
+                oscillator: { type: 'square' },
+                envelope: { attack: 0.02, decay: 0.1, sustain: 0.4, release: 0.35 }
+            }
+        }).toDestination(), '8n');
+    }
+
+    if (instrument === 'membrane') {
+        return createMonoInstrument(new Tone.MembraneSynth({
+            volume: -8,
+            pitchDecay: 0.04,
+            octaves: 6,
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.001, decay: 0.45, sustain: 0.01, release: 0.3 }
+        }).toDestination(), '8n');
+    }
+
+    if (instrument === 'metal') {
+        const synth = new Tone.MetalSynth({
+            volume: -14,
+            frequency: 220,
+            envelope: { attack: 0.001, decay: 0.35, release: 0.25 },
+            harmonicity: 5.1,
+            modulationIndex: 24,
+            resonance: 3000,
+            octaves: 1.5
+        }).toDestination();
+
+        return {
+            synth,
+            playNote: (midi) => {
+                synth.frequency.value = Tone.Frequency(midi, 'midi').toFrequency();
+                synth.triggerAttackRelease('16n');
+            },
+            stop: () => {
+                synth.dispose();
+            }
+        };
+    }
+
+    return createPolyInstrument(Tone.Synth, {
+        volume: -7,
+        oscillator: {
+            type: 'triangle'
+        },
+        envelope: {
+            attack: 0.02,
+            decay: 0.18,
+            sustain: 0.3,
+            release: 0.8
+        }
+    });
+};
 
 const getPitchFromMidi = (midi) => {
     const noteIndex = midi % 12;
@@ -120,6 +353,19 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
     ].join('\n');
 };
 
+function ToolbarIcon({ children }) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            className="toolbar-icon"
+            aria-hidden="true"
+            focusable="false"
+        >
+            {children}
+        </svg>
+    );
+}
+
 function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine }) {
     const notationContainerRef = React.useRef(null);
     const abcNotation = React.useMemo(
@@ -146,7 +392,6 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
     return (
         <div className="staff-panel">
             <div className="staff-panel__header">
-                <h3>Pentagramma</h3>
                 <span>{notes.length} note nello stack</span>
             </div>
             <div
@@ -169,8 +414,12 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
 function GuitarFretboard() {
     const [hoveredNote, setHoveredNote] = React.useState(null);
     const [noteStack, setNoteStack] = React.useState([]);
+    const [isPlaying, setIsPlaying] = React.useState(false);
+    const [instrument, setInstrument] = React.useState(DEFAULT_INSTRUMENT);
     const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
+    const synthRef = React.useRef(null);
+    const playbackActiveRef = React.useRef(false);
     const [useItalianNotation, setUseItalianNotation] = React.useState(() => {
         // Carica la configurazione all'avvio
         const config = configRepository.load();
@@ -181,6 +430,24 @@ function GuitarFretboard() {
     React.useEffect(() => {
         configRepository.update('useItalianNotation', useItalianNotation);
     }, [useItalianNotation]);
+
+    React.useEffect(() => {
+        return () => {
+            playbackActiveRef.current = false;
+
+            if (synthRef.current) {
+                synthRef.current.stop();
+                synthRef.current = null;
+            }
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (synthRef.current) {
+            synthRef.current.stop();
+            synthRef.current = null;
+        }
+    }, [instrument]);
 
     const strings = 6;
     const frets = 24;
@@ -236,6 +503,51 @@ function GuitarFretboard() {
         ]);
     };
 
+    const removeLastNoteFromStack = () => {
+        setNoteStack((currentStack) => currentStack.slice(0, -1));
+    };
+
+    const stopPlayback = React.useCallback(() => {
+        playbackActiveRef.current = false;
+        setIsPlaying(false);
+
+        if (synthRef.current) {
+            synthRef.current.stop();
+            synthRef.current = null;
+        }
+    }, []);
+
+    const playStack = React.useCallback(async () => {
+        if (noteStack.length === 0 || isPlaying) {
+            return;
+        }
+
+        await Tone.start();
+
+        if (!synthRef.current) {
+            synthRef.current = createInstrument(instrument);
+        }
+
+        setIsPlaying(true);
+        playbackActiveRef.current = true;
+
+        const msPerQuarter = 500;
+
+        try {
+            for (const note of noteStack) {
+                if (!playbackActiveRef.current) {
+                    break;
+                }
+
+                synthRef.current.playNote(note.displayMidi);
+                await new Promise((resolve) => window.setTimeout(resolve, msPerQuarter));
+            }
+        } finally {
+            playbackActiveRef.current = false;
+            setIsPlaying(false);
+        }
+    }, [instrument, isPlaying, noteStack]);
+
     // Funzione per calcolare l'altezza in base alla posizione x
     const getHeightAtX = (x, totalWidth) => {
         const ratio = x / totalWidth;
@@ -266,7 +578,6 @@ function GuitarFretboard() {
     return (
         <div className="guitar-page">
             <div className="fretboard-toolbar">
-                <h2 style={{ margin: 0 }}>Tastiera della Chitarra</h2>
                 <div className="notation-controls">
                     <span style={{ fontSize: '14px', fontWeight: '500' }}>Notazione:</span>
                     <label style={{
@@ -310,6 +621,20 @@ function GuitarFretboard() {
                     <span style={{ fontSize: '14px', minWidth: '150px' }}>
                         {useItalianNotation ? 'Italiana (Do, Re, Mi)' : 'Internazionale (C, D, E)'}
                     </span>
+                    <label className="instrument-control">
+                        Strumento
+                        <select
+                            value={instrument}
+                            onChange={(event) => setInstrument(event.target.value)}
+                            disabled={isPlaying}
+                        >
+                            {INSTRUMENT_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
                     <div className="measure-controls">
                         <label>
                             Min battute/riga
@@ -334,11 +659,105 @@ function GuitarFretboard() {
                     </div>
                     <button
                         type="button"
-                        onClick={() => setNoteStack([])}
-                        disabled={noteStack.length === 0}
+                        onClick={removeLastNoteFromStack}
+                        disabled={noteStack.length === 0 || isPlaying}
                         className="stack-button"
+                        aria-label="Annulla ultima nota"
+                        title="Annulla ultima nota"
                     >
-                        Svuota stack
+                        <ToolbarIcon>
+                            <path
+                                d="M10 7L5 12L10 17"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                            <path
+                                d="M6 12H15C17.7614 12 20 14.2386 20 17"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </ToolbarIcon>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setNoteStack([])}
+                        disabled={noteStack.length === 0 || isPlaying}
+                        className="stack-button"
+                        aria-label="Svuota stack"
+                        title="Svuota stack"
+                    >
+                        <ToolbarIcon>
+                            <path
+                                d="M4 7H20"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                            />
+                            <path
+                                d="M9 7V5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                            <path
+                                d="M7 7L8 19C8.08911 20.0681 8.9822 20.8889 10.054 20.8889H13.946C15.0178 20.8889 15.9109 20.0681 16 19L17 7"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                            <path
+                                d="M10 11V17"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                            />
+                            <path
+                                d="M14 11V17"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                            />
+                        </ToolbarIcon>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={playStack}
+                        disabled={noteStack.length === 0 || isPlaying}
+                        className="playback-button"
+                        aria-label={isPlaying ? 'In riproduzione' : 'Riproduci'}
+                        title={isPlaying ? 'In riproduzione' : 'Riproduci'}
+                    >
+                        <ToolbarIcon>
+                            <path
+                                d="M8 6V18L18 12L8 6Z"
+                                fill="currentColor"
+                            />
+                        </ToolbarIcon>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={stopPlayback}
+                        disabled={!isPlaying}
+                        className="playback-button playback-button--stop"
+                        aria-label="Stop"
+                        title="Stop"
+                    >
+                        <ToolbarIcon>
+                            <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+                        </ToolbarIcon>
                     </button>
                 </div>
             </div>

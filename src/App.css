@@ -90,15 +90,66 @@
   flex-wrap: wrap;
 }
 
+.instrument-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #5c4634;
+}
+
+.instrument-control select {
+  border-radius: 8px;
+  border: 1px solid rgba(89, 61, 38, 0.2);
+  background: #fffaf2;
+  color: #3f2b18;
+  padding: 0.45em 0.7em;
+  font: inherit;
+}
+
 .stack-button {
   border: 1px solid rgba(79, 56, 34, 0.1);
   background: #f5ead8;
   color: #593d26;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playback-button {
+  border: 1px solid rgba(79, 56, 34, 0.18);
+  background: #e9f3ea;
+  color: #24442a;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playback-button--stop {
+  background: #f6e3e0;
+  color: #5e2b24;
 }
 
 .stack-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.playback-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.toolbar-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .fretboard-shell {
