@@ -771,7 +771,6 @@ function GuitarFretboard() {
         <div className="guitar-page">
             <div className="fretboard-toolbar editor-toolbar">
                 <div className="editor-toolbar__group editor-toolbar__group--notation">
-                    <span className="editor-toolbar__label">Notazione</span>
                     <label className="editor-toggle">
                         <input
                             type="checkbox"
@@ -1120,6 +1119,11 @@ function GuitarFretboard() {
                                 : fretboardOffsetX + (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
                             const y = getStringY(stringIndex, Math.max(0, x - fretboardOffsetX));
                             const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
+                            const hoveredMidi = hoveredNote != null
+                                ? OPEN_STRING_MIDI[hoveredNote.string] + hoveredNote.fret
+                                : null;
+                            const thisMidi = OPEN_STRING_MIDI[stringIndex] + fretNum;
+                            const isSameNote = hoveredMidi != null && !isHovered && (thisMidi % 12) === (hoveredMidi % 12);
 
                             return (
                                 <g key={`note-${stringIndex}-${fretNum}`}>
@@ -1155,6 +1159,19 @@ function GuitarFretboard() {
                                             fill="yellow"
                                             stroke="orange"
                                             strokeWidth="2"
+                                            style={{ pointerEvents: 'none' }}
+                                        />
+                                    )}
+                                    {/* Cerchietto arancione tenue per le note uguali (stessa classe) */}
+                                    {isSameNote && (
+                                        <circle
+                                            cx={x}
+                                            cy={y}
+                                            r="10"
+                                            fill="orange"
+                                            fillOpacity="0.35"
+                                            stroke="orange"
+                                            strokeWidth="1.5"
                                             style={{ pointerEvents: 'none' }}
                                         />
                                     )}
