@@ -9,6 +9,11 @@ const DEFAULT_MIN_MEASURES_PER_LINE = 2;
 const DEFAULT_MAX_MEASURES_PER_LINE = 4;
 const DEFAULT_INSTRUMENT = 'piano';
 const DEFAULT_NOTE_DURATION = 'quarter';
+const DEFAULT_TIME_SIGNATURE = '4/4';
+const TIME_SIGNATURE_OPTIONS = [
+    { value: '4/4', label: '4/4', unitsPerMeasure: 16 },
+    { value: '3/4', label: '3/4', unitsPerMeasure: 12 }
+];
 const INSTRUMENT_OPTIONS = [
     { value: 'piano', label: 'Pianoforte' },
     { value: 'guitar', label: 'Chitarra' },
@@ -328,16 +333,18 @@ const splitMeasuresIntoLines = (measures, minMeasuresPerLine, maxMeasuresPerLine
     return lines;
 };
 
-const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
+const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature = '4/4') => {
+    const timeSigOption = TIME_SIGNATURE_OPTIONS.find((o) => o.value === timeSignature) ?? TIME_SIGNATURE_OPTIONS[0];
+    const unitsPerMeasure = timeSigOption.unitsPerMeasure;
     const visibleNotes = notes;
 
     if (visibleNotes.length === 0) {
         return [
             'X:1',
-            'M:4/4',
+            `M:${timeSignature}`,
             'L:1/16',
             'K:C clef=treble',
-            '| z16 |]'
+            `| z${unitsPerMeasure} |]`
         ].join('\n');
     }
 
@@ -354,9 +361,9 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
     let currentUnits = 0;
 
     for (const abcNote of abcNotes) {
-        if (currentUnits + abcNote.abcUnits > 16) {
-            if (currentUnits < 16) {
-                const restUnits = 16 - currentUnits;
+        if (currentUnits + abcNote.abcUnits > unitsPerMeasure) {
+            if (currentUnits < unitsPerMeasure) {
+                const restUnits = unitsPerMeasure - currentUnits;
                 currentMeasure.push(restUnits === 1 ? 'z' : `z${restUnits}`);
             }
 
@@ -370,8 +377,8 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
     }
 
     if (currentMeasure.length > 0) {
-        if (currentUnits < 16) {
-            const restUnits = 16 - currentUnits;
+        if (currentUnits < unitsPerMeasure) {
+            const restUnits = unitsPerMeasure - currentUnits;
             currentMeasure.push(restUnits === 1 ? 'z' : `z${restUnits}`);
         }
 
@@ -391,7 +398,7 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
 
     return [
         'X:1',
-        'M:4/4',
+        `M:${timeSignature}`,
         'L:1/16',
         'K:C clef=treble',
         ...abcStaffLines
@@ -499,12 +506,12 @@ function RestIcon({ duration, className = '' }) {
     );
 }
 
-function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration, onNoteHover }) {
+function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration, timeSignature, onNoteHover }) {
     const notationContainerRef = React.useRef(null);
     const durationOption = React.useMemo(() => getDurationOption(noteDuration), [noteDuration]);
     const abcNotation = React.useMemo(
-        () => buildAbcNotation(notes, minMeasuresPerLine, maxMeasuresPerLine),
-        [notes, minMeasuresPerLine, maxMeasuresPerLine]
+        () => buildAbcNotation(notes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature),
+        [notes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature]
     );
     // noteOnly: stack items that are pitched notes (not rests)
     const noteOnlyStack = React.useMemo(() => notes.filter((n) => !n.isRest), [notes]);
@@ -552,7 +559,7 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
                 aria-label="Pentagramma con battute delle note selezionate"
             />
             <p className="staff-panel__legend">
-                Mostrate {notes.length} note in battute da 4/4.
+                Mostrate {notes.length} note in battute da {timeSignature}.
                 {' '}
                 Durata selezionata: {durationOption.label}.
                 {' '}
@@ -571,6 +578,7 @@ function GuitarFretboard() {
     const [isPlaying, setIsPlaying] = React.useState(false);
     const [instrument, setInstrument] = React.useState(DEFAULT_INSTRUMENT);
     const [noteDuration, setNoteDuration] = React.useState(DEFAULT_NOTE_DURATION);
+    const [timeSignature, setTimeSignature] = React.useState(DEFAULT_TIME_SIGNATURE);
     const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
     const synthRef = React.useRef(null);
@@ -865,6 +873,18 @@ function GuitarFretboard() {
                 <span className="editor-toolbar__divider" aria-hidden="true"></span>
 
                 <div className="measure-controls editor-toolbar__group">
+                    <label>
+                        Tempo
+                        <select
+                            value={timeSignature}
+                            onChange={(e) => setTimeSignature(e.target.value)}
+                            disabled={isPlaying}
+                        >
+                            {TIME_SIGNATURE_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                        </select>
+                    </label>
                     <label>
                         Min battute/riga
                         <input
@@ -1231,6 +1251,7 @@ function GuitarFretboard() {
                 minMeasuresPerLine={minMeasuresPerLine}
                 maxMeasuresPerLine={maxMeasuresPerLine}
                 noteDuration={noteDuration}
+                timeSignature={timeSignature}
                 onNoteHover={setHoveredStaffMidi}
             />
         </div>
