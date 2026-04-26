@@ -1,18 +1,13 @@
 import React from 'react';
+import abcjs from 'abcjs';
 import configRepository from './repositories/ConfigRepository';
 
 const OPEN_STRING_MIDI = [64, 59, 55, 50, 45, 40];
 const NOTE_SEQUENCE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NATURAL_NOTE_STEPS = {
-    C: 0,
-    D: 1,
-    E: 2,
-    F: 3,
-    G: 4,
-    A: 5,
-    B: 6
-};
-const STAFF_BASE_STEP = NATURAL_NOTE_STEPS.E + (4 * 7);
+const ABC_NOTE_SEQUENCE = ['C', '^C', 'D', '^D', 'E', 'F', '^F', 'G', '^G', 'A', '^A', 'B'];
+const NOTES_PER_MEASURE = 4;
+const DEFAULT_MIN_MEASURES_PER_LINE = 2;
+const DEFAULT_MAX_MEASURES_PER_LINE = 4;
 
 const getPitchFromMidi = (midi) => {
     const noteIndex = midi % 12;
@@ -27,42 +22,126 @@ const getPitchFromMidi = (midi) => {
     };
 };
 
-const getStaffStep = (displayMidi) => {
-    const displayPitch = getPitchFromMidi(displayMidi);
-    const naturalNote = displayPitch.noteName[0];
-    return NATURAL_NOTE_STEPS[naturalNote] + (displayPitch.octave * 7);
-};
+const getAbcPitchFromMidi = (midi) => {
+    const noteIndex = ((midi % 12) + 12) % 12;
+    const abcNote = ABC_NOTE_SEQUENCE[noteIndex];
+    const octave = Math.floor(midi / 12) - 1;
+    const accidental = abcNote.startsWith('^') ? '^' : '';
+    const noteLetter = accidental ? abcNote[1] : abcNote[0];
 
-const getLedgerLineSteps = (staffStep) => {
-    const ledgerSteps = [];
-
-    if (staffStep < STAFF_BASE_STEP) {
-        for (let step = STAFF_BASE_STEP - 2; step >= staffStep; step -= 2) {
-            ledgerSteps.push(step);
-        }
+    if (octave >= 5) {
+        const apostrophes = "'".repeat(Math.max(0, octave - 5));
+        return `${accidental}${noteLetter.toLowerCase()}${apostrophes}`;
     }
 
-    const topLineStep = STAFF_BASE_STEP + 8;
-    if (staffStep > topLineStep) {
-        for (let step = topLineStep + 2; step <= staffStep; step += 2) {
-            ledgerSteps.push(step);
-        }
-    }
-
-    return ledgerSteps;
+    const commas = ','.repeat(Math.max(0, 4 - octave));
+    return `${accidental}${noteLetter}${commas}`;
 };
 
-function StaffNotation({ notes, formatNoteName }) {
-    const width = 980;
-    const height = 220;
-    const lineSpacing = 18;
-    const noteSpacing = 56;
-    const staffStartX = 70;
-    const headWidth = 18;
-    const headHeight = 12;
-    const baseY = 148;
-    const staffEndX = Math.max(width - 40, staffStartX + (Math.max(notes.length, 1) * noteSpacing) + 40);
-    const visibleNotes = notes.slice(-14);
+const clampToPositiveInteger = (value, fallbackValue) => {
+    const parsedValue = Number.parseInt(value, 10);
+
+    if (Number.isNaN(parsedValue) || parsedValue < 1) {
+        return fallbackValue;
+    }
+
+    return parsedValue;
+};
+
+const splitMeasuresIntoLines = (measures, minMeasuresPerLine, maxMeasuresPerLine) => {
+    const totalMeasures = measures.length;
+
+    if (totalMeasures === 0) {
+        return [];
+    }
+
+    const minLines = Math.ceil(totalMeasures / maxMeasuresPerLine);
+    const maxLines = Math.max(1, Math.floor(totalMeasures / minMeasuresPerLine));
+    const linesCount = minLines <= maxLines ? minLines : minLines;
+
+    const baseLineSize = Math.floor(totalMeasures / linesCount);
+    const extraMeasures = totalMeasures % linesCount;
+    const lines = [];
+    let cursor = 0;
+
+    for (let lineIndex = 0; lineIndex < linesCount; lineIndex += 1) {
+        const lineSize = baseLineSize + (lineIndex < extraMeasures ? 1 : 0);
+        lines.push(measures.slice(cursor, cursor + lineSize));
+        cursor += lineSize;
+    }
+
+    return lines;
+};
+
+const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine) => {
+    const visibleNotes = notes;
+
+    if (visibleNotes.length === 0) {
+        return [
+            'X:1',
+            'M:4/4',
+            'L:1/4',
+            'K:C clef=treble',
+            '| z z z z |]'
+        ].join('\n');
+    }
+
+    const abcNotes = visibleNotes.map((note) => getAbcPitchFromMidi(note.displayMidi));
+    const measures = [];
+
+    for (let index = 0; index < abcNotes.length; index += NOTES_PER_MEASURE) {
+        const measureNotes = abcNotes.slice(index, index + NOTES_PER_MEASURE);
+
+        while (measureNotes.length < NOTES_PER_MEASURE) {
+            measureNotes.push('z');
+        }
+
+        measures.push(measureNotes.join(' '));
+    }
+
+    const sanitizedMin = clampToPositiveInteger(minMeasuresPerLine, DEFAULT_MIN_MEASURES_PER_LINE);
+    const sanitizedMax = Math.max(
+        sanitizedMin,
+        clampToPositiveInteger(maxMeasuresPerLine, DEFAULT_MAX_MEASURES_PER_LINE)
+    );
+    const measureLines = splitMeasuresIntoLines(measures, sanitizedMin, sanitizedMax);
+    const abcStaffLines = measureLines.map((line, lineIndex) => {
+        const suffix = lineIndex === measureLines.length - 1 ? ' |]' : ' |';
+        return `| ${line.join(' | ')}${suffix}`;
+    });
+
+    return [
+        'X:1',
+        'T:Pentagramma Chitarra',
+        'M:4/4',
+        'L:1/4',
+        'K:C clef=treble',
+        ...abcStaffLines
+    ].join('\n');
+};
+
+function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine }) {
+    const notationContainerRef = React.useRef(null);
+    const abcNotation = React.useMemo(
+        () => buildAbcNotation(notes, minMeasuresPerLine, maxMeasuresPerLine),
+        [notes, minMeasuresPerLine, maxMeasuresPerLine]
+    );
+
+    React.useEffect(() => {
+        if (!notationContainerRef.current) {
+            return;
+        }
+
+        abcjs.renderAbc(notationContainerRef.current, abcNotation, {
+            responsive: 'resize',
+            staffwidth: 920,
+            add_classes: true,
+            wrap: {
+                minSpacing: 1.8,
+                maxSpacing: 2.8
+            }
+        });
+    }, [abcNotation]);
 
     return (
         <div className="staff-panel">
@@ -70,95 +149,19 @@ function StaffNotation({ notes, formatNoteName }) {
                 <h3>Pentagramma</h3>
                 <span>{notes.length} note nello stack</span>
             </div>
-            <svg className="staff-panel__svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Pentagramma con le note selezionate">
-                {[0, 1, 2, 3, 4].map((lineIndex) => {
-                    const y = baseY - (lineIndex * lineSpacing);
-                    return (
-                        <line
-                            key={`staff-line-${lineIndex}`}
-                            x1={staffStartX}
-                            y1={y}
-                            x2={staffEndX}
-                            y2={y}
-                            stroke="#2d241c"
-                            strokeWidth="1.5"
-                        />
-                    );
-                })}
-
-                <text x="28" y={baseY - (lineSpacing * 1.1)} fontSize="60" fill="#2d241c" fontFamily="serif">
-                    &#119070;
-                </text>
-
-                {visibleNotes.map((note, noteIndex) => {
-                    const x = 120 + (noteIndex * noteSpacing);
-                    const staffStep = getStaffStep(note.displayMidi);
-                    const y = baseY - ((staffStep - STAFF_BASE_STEP) * (lineSpacing / 2));
-                    const ledgerSteps = getLedgerLineSteps(staffStep);
-                    const hasSharp = note.noteName.includes('#');
-
-                    return (
-                        <g key={note.id}>
-                            {ledgerSteps.map((ledgerStep) => {
-                                const ledgerY = baseY - ((ledgerStep - STAFF_BASE_STEP) * (lineSpacing / 2));
-                                return (
-                                    <line
-                                        key={`${note.id}-ledger-${ledgerStep}`}
-                                        x1={x - 16}
-                                        y1={ledgerY}
-                                        x2={x + 16}
-                                        y2={ledgerY}
-                                        stroke="#2d241c"
-                                        strokeWidth="1.5"
-                                    />
-                                );
-                            })}
-                            {hasSharp && (
-                                <text
-                                    x={x - 24}
-                                    y={y + 5}
-                                    fontSize="22"
-                                    fill="#2d241c"
-                                    fontFamily="Georgia, serif"
-                                >
-                                    #
-                                </text>
-                            )}
-                            <ellipse
-                                cx={x}
-                                cy={y}
-                                rx={headWidth / 2}
-                                ry={headHeight / 2}
-                                fill="#2d241c"
-                                transform={`rotate(-20 ${x} ${y})`}
-                            />
-                            <line
-                                x1={x + 7}
-                                y1={y}
-                                x2={x + 7}
-                                y2={y - 34}
-                                stroke="#2d241c"
-                                strokeWidth="1.5"
-                            />
-                            <text
-                                x={x}
-                                y={182}
-                                textAnchor="middle"
-                                fontSize="12"
-                                fill="#5f4631"
-                            >
-                                {formatNoteName(note.noteName)}
-                            </text>
-                        </g>
-                    );
-                })}
-
-                {notes.length === 0 && (
-                    <text x={width / 2} y={height / 2} textAnchor="middle" fontSize="18" fill="#7b6657">
-                        Clicca una nota sulla tastiera per aggiungerla al pentagramma
-                    </text>
-                )}
-            </svg>
+            <div
+                ref={notationContainerRef}
+                className="staff-panel__score"
+                role="img"
+                aria-label="Pentagramma con battute delle note selezionate"
+            />
+            <p className="staff-panel__legend">
+                Mostrate {notes.length} note in battute da 4/4.
+                {' '}
+                Range battute/riga: min {minMeasuresPerLine}, max {maxMeasuresPerLine}.
+                {' '}
+                {notes.length > 0 && `Ultima nota: ${formatNoteName(notes[notes.length - 1].noteName)}.`}
+            </p>
         </div>
     );
 }
@@ -166,6 +169,8 @@ function StaffNotation({ notes, formatNoteName }) {
 function GuitarFretboard() {
     const [hoveredNote, setHoveredNote] = React.useState(null);
     const [noteStack, setNoteStack] = React.useState([]);
+    const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
+    const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
     const [useItalianNotation, setUseItalianNotation] = React.useState(() => {
         // Carica la configurazione all'avvio
         const config = configRepository.load();
@@ -203,6 +208,17 @@ function GuitarFretboard() {
     // Funzione per convertire la nota nella notazione scelta
     const formatNoteName = (noteName) => {
         return useItalianNotation ? noteToItalian[noteName] : noteName;
+    };
+
+    const handleMinMeasuresChange = (event) => {
+        const nextMin = clampToPositiveInteger(event.target.value, DEFAULT_MIN_MEASURES_PER_LINE);
+        setMinMeasuresPerLine(nextMin);
+        setMaxMeasuresPerLine((currentMax) => Math.max(currentMax, nextMin));
+    };
+
+    const handleMaxMeasuresChange = (event) => {
+        const nextMax = clampToPositiveInteger(event.target.value, DEFAULT_MAX_MEASURES_PER_LINE);
+        setMaxMeasuresPerLine(Math.max(nextMax, minMeasuresPerLine));
     };
 
     const addNoteToStack = (stringIndex, fret) => {
@@ -294,6 +310,28 @@ function GuitarFretboard() {
                     <span style={{ fontSize: '14px', minWidth: '150px' }}>
                         {useItalianNotation ? 'Italiana (Do, Re, Mi)' : 'Internazionale (C, D, E)'}
                     </span>
+                    <div className="measure-controls">
+                        <label>
+                            Min battute/riga
+                            <input
+                                type="number"
+                                min="1"
+                                max="12"
+                                value={minMeasuresPerLine}
+                                onChange={handleMinMeasuresChange}
+                            />
+                        </label>
+                        <label>
+                            Max battute/riga
+                            <input
+                                type="number"
+                                min={minMeasuresPerLine}
+                                max="12"
+                                value={maxMeasuresPerLine}
+                                onChange={handleMaxMeasuresChange}
+                            />
+                        </label>
+                    </div>
                     <button
                         type="button"
                         onClick={() => setNoteStack([])}
@@ -444,7 +482,12 @@ function GuitarFretboard() {
                 </div>
             )}
 
-            <StaffNotation notes={noteStack} formatNoteName={formatNoteName} />
+            <StaffNotation
+                notes={noteStack}
+                formatNoteName={formatNoteName}
+                minMeasuresPerLine={minMeasuresPerLine}
+                maxMeasuresPerLine={maxMeasuresPerLine}
+            />
         </div>
     );
 }
