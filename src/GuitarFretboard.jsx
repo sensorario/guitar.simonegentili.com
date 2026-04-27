@@ -579,6 +579,7 @@ function GuitarFretboard() {
     const [instrument, setInstrument] = React.useState(DEFAULT_INSTRUMENT);
     const [noteDuration, setNoteDuration] = React.useState(DEFAULT_NOTE_DURATION);
     const [timeSignature, setTimeSignature] = React.useState(DEFAULT_TIME_SIGNATURE);
+    const [bpm, setBpm] = React.useState(120);
     const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
     const synthRef = React.useRef(null);
@@ -748,7 +749,7 @@ function GuitarFretboard() {
         setIsPlaying(true);
         playbackActiveRef.current = true;
 
-        const msPerQuarter = 500;
+        const msPerQuarter = 60000 / bpm;
 
         try {
             for (const note of noteStack) {
@@ -766,7 +767,7 @@ function GuitarFretboard() {
             playbackActiveRef.current = false;
             setIsPlaying(false);
         }
-    }, [instrument, isPlaying, noteStack]);
+    }, [instrument, isPlaying, noteStack, bpm]);
 
     // Funzione per calcolare l'altezza in base alla posizione x
     const getHeightAtX = (x, totalWidth) => {
@@ -873,6 +874,20 @@ function GuitarFretboard() {
                 <span className="editor-toolbar__divider" aria-hidden="true"></span>
 
                 <div className="measure-controls editor-toolbar__group">
+                    <label>
+                        BPM
+                        <input
+                            type="number"
+                            min="20"
+                            max="300"
+                            value={bpm}
+                            onChange={(e) => {
+                                const v = Number.parseInt(e.target.value, 10);
+                                if (!Number.isNaN(v) && v >= 20 && v <= 300) setBpm(v);
+                            }}
+                            disabled={isPlaying}
+                        />
+                    </label>
                     <label>
                         Tempo
                         <select
