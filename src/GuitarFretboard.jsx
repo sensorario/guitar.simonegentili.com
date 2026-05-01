@@ -689,6 +689,10 @@ function GuitarFretboard() {
     const playbackActiveRef = React.useRef(false);
     const abcjsRef = React.useRef(null);
     const printContainerRef = React.useRef(null);
+    const staffPanelWrapperRef = React.useRef(null);
+    const staffBottomAnchorRef = React.useRef(null);
+    const fretboardShellRef = React.useRef(null);
+    const previousStackLengthRef = React.useRef(0);
     const [savedSongs, setSavedSongs] = React.useState(() => {
         try {
             return JSON.parse(localStorage.getItem(SONGS_STORAGE_KEY) ?? '{}');
@@ -725,6 +729,30 @@ function GuitarFretboard() {
             synthRef.current = null;
         }
     }, [instrument]);
+
+    React.useEffect(() => {
+        const previousLength = previousStackLengthRef.current;
+        const currentLength = noteStack.length;
+        previousStackLengthRef.current = currentLength;
+
+        // Run only when user adds one item (note/rest) to the stack.
+        if (currentLength !== previousLength + 1) {
+            return;
+        }
+
+        const anchorElement = staffBottomAnchorRef.current;
+        if (!anchorElement) {
+            return;
+        }
+
+        const scrollToBottom = () => {
+            // Scrolla fino in fondo della pagina
+            const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+            window.scrollTo({ top: maxScroll, behavior: 'smooth' });
+        };
+
+        window.requestAnimationFrame(scrollToBottom);
+    }, [noteStack]);
 
     const strings = 6;
     const frets = 24;
@@ -865,6 +893,11 @@ function GuitarFretboard() {
         const midi = OPEN_STRING_MIDI[stringIndex] + fret;
         const pitch = getPitchFromMidi(midi);
         const duration = noteDuration;
+
+        window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: 'smooth'
+        });
 
         setNoteStack((currentStack) => [
             ...currentStack,
@@ -1297,15 +1330,18 @@ function GuitarFretboard() {
                 </div>
             </div>
 
-            <StaffNotation
-                notes={noteStack}
-                formatNoteName={formatNoteName}
-                minMeasuresPerLine={minMeasuresPerLine}
-                maxMeasuresPerLine={maxMeasuresPerLine}
-                noteDuration={noteDuration}
-                timeSignature={timeSignature}
-                onNoteHover={setHoveredStaffMidi}
-            />
+            <div ref={staffPanelWrapperRef}>
+                <StaffNotation
+                    notes={noteStack}
+                    formatNoteName={formatNoteName}
+                    minMeasuresPerLine={minMeasuresPerLine}
+                    maxMeasuresPerLine={maxMeasuresPerLine}
+                    noteDuration={noteDuration}
+                    timeSignature={timeSignature}
+                    onNoteHover={setHoveredStaffMidi}
+                />
+                <div ref={staffBottomAnchorRef} aria-hidden="true" />
+            </div>
 
             {noteStack.length > 0 && (
                 <div className="selected-note-label">
@@ -1315,7 +1351,7 @@ function GuitarFretboard() {
                 </div>
             )}
 
-            <div className="fretboard-shell">
+            <div className="fretboard-shell" ref={fretboardShellRef}>
                 <div className="wrapper">
                     <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg">
                         {/* Sfondo della tastiera a forma di trapezio */}
