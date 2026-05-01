@@ -8,6 +8,20 @@
   padding: 8px 0 8px;
 }
 
+.github-ribbon {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 999;
+  line-height: 0;
+}
+
+.github-ribbon img {
+  display: block;
+  width: 149px;
+  height: 149px;
+}
+
 .app-hero {
   margin-top: 16px;
   text-align: left;
@@ -405,6 +419,11 @@
 @media (max-width: 720px) {
   .app-shell {
     width: min(100vw - 20px, 1380px);
+  }
+
+  .github-ribbon img {
+    width: 112px;
+    height: 112px;
   }
 
   .editor-toolbar {
