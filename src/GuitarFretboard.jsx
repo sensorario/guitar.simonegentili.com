@@ -540,7 +540,7 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
             noteEls.forEach((el, i) => {
                 const stackNote = noteOnlyStack[i];
                 if (!stackNote) return;
-                const handler = () => onNoteHover?.(stackNote.displayMidi);
+                const handler = () => onNoteHover?.(stackNote.midi);
                 const clearHandler = () => onNoteHover?.(null);
                 el.addEventListener('mouseenter', handler);
                 el.addEventListener('mouseleave', clearHandler);
@@ -1179,7 +1179,9 @@ function GuitarFretboard() {
                                 : null;
                             const thisMidi = OPEN_STRING_MIDI[stringIndex] + fretNum;
                             const activeMidi = hoveredMidi ?? hoveredStaffMidi;
-                            const isSameNote = activeMidi != null && !isHovered && (thisMidi % 12) === (activeMidi % 12);
+                            const isSameNote = activeMidi != null
+                                && !isHovered
+                                && (thisMidi % 12) === (activeMidi % 12);
                             const isStaffExactMatch = hoveredStaffMidi != null && hoveredNote == null && thisMidi === hoveredStaffMidi;
 
                             return (
