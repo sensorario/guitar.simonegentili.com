@@ -1297,6 +1297,24 @@ function GuitarFretboard() {
                 </div>
             </div>
 
+            <StaffNotation
+                notes={noteStack}
+                formatNoteName={formatNoteName}
+                minMeasuresPerLine={minMeasuresPerLine}
+                maxMeasuresPerLine={maxMeasuresPerLine}
+                noteDuration={noteDuration}
+                timeSignature={timeSignature}
+                onNoteHover={setHoveredStaffMidi}
+            />
+
+            {noteStack.length > 0 && (
+                <div className="selected-note-label">
+                    {noteStack[noteStack.length - 1].isRest
+                        ? `Ultimo elemento: ${getStackItemLabel(noteStack[noteStack.length - 1], formatNoteName)}`
+                        : `Ultima nota: ${formatNoteName(noteStack[noteStack.length - 1].noteName)} (${getDurationOption(noteStack[noteStack.length - 1].duration).label}) (Corda ${noteStack[noteStack.length - 1].string + 1}, Tasto ${noteStack[noteStack.length - 1].fret})`}
+                </div>
+            )}
+
             <div className="fretboard-shell">
                 <div className="wrapper">
                     <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg">
@@ -1468,24 +1486,6 @@ function GuitarFretboard() {
 
                 </div>
             </div>
-
-            {noteStack.length > 0 && (
-                <div className="selected-note-label">
-                    {noteStack[noteStack.length - 1].isRest
-                        ? `Ultimo elemento: ${getStackItemLabel(noteStack[noteStack.length - 1], formatNoteName)}`
-                        : `Ultima nota: ${formatNoteName(noteStack[noteStack.length - 1].noteName)} (${getDurationOption(noteStack[noteStack.length - 1].duration).label}) (Corda ${noteStack[noteStack.length - 1].string + 1}, Tasto ${noteStack[noteStack.length - 1].fret})`}
-                </div>
-            )}
-
-            <StaffNotation
-                notes={noteStack}
-                formatNoteName={formatNoteName}
-                minMeasuresPerLine={minMeasuresPerLine}
-                maxMeasuresPerLine={maxMeasuresPerLine}
-                noteDuration={noteDuration}
-                timeSignature={timeSignature}
-                onNoteHover={setHoveredStaffMidi}
-            />
 
             <div className="print-sheet-container" ref={printContainerRef} aria-hidden="true" />
         </div>

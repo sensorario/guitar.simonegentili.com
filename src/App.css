@@ -400,10 +400,15 @@
 }
 
 .fretboard-shell {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
   overflow-x: auto;
   padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(75, 46, 19, 0.1), rgba(75, 46, 19, 0.02));
+  box-shadow: 0 -8px 24px rgba(67, 42, 18, 0.12);
 
   .wrapper {
     margin: auto;
