@@ -1087,171 +1087,175 @@ function GuitarFretboard() {
             </div>
 
             <div className="fretboard-shell">
-                <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg">
-                    {/* Sfondo della tastiera a forma di trapezio */}
-                    <polygon
-                        points={`${fretboardOffsetX},${(fretboardHeightRight - fretboardHeightLeft) / 2} 
+                <div className="wrapper">
+                    <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg">
+                        {/* Sfondo della tastiera a forma di trapezio */}
+                        <polygon
+                            points={`${fretboardOffsetX},${(fretboardHeightRight - fretboardHeightLeft) / 2} 
                                  ${fretboardOffsetX},${(fretboardHeightRight + fretboardHeightLeft) / 2} 
                                  ${totalWidth},${fretboardHeightRight} 
                                  ${totalWidth},0`}
-                        fill="#8B4513"
-                        stroke="#654321"
-                        strokeWidth="3"
-                    />
+                            fill="#8B4513"
+                            stroke="#654321"
+                            strokeWidth="3"
+                        />
 
-                    {/* Corde */}
-                    {[...Array(strings)].map((_, i) => {
-                        const y1 = getStringY(i, 0);
-                        const y2 = getStringY(i, fretboardWidth);
-                        const thickness = 0.5 + i * 0.4; // Invertito: la prima corda è sottile, l'ultima grossa
-                        return (
-                            <line
-                                key={`string-${i}`}
-                                x1="0"
-                                y1={y1}
-                                x2={totalWidth}
-                                y2={y2}
-                                stroke="#C0C0C0"
-                                strokeWidth={thickness}
-                            />
-                        );
-                    })}
-
-                    {/* Tasti */}
-                    {[...Array(frets + 1)].map((_, i) => {
-                        const x = fretboardOffsetX + getFretPosition(i);
-                        const heightAtX = getHeightAtX(getFretPosition(i), fretboardWidth);
-                        const yTop = (fretboardHeightRight - heightAtX) / 2;
-                        const yBottom = yTop + heightAtX;
-                        return (
-                            <line
-                                key={`fret-${i}`}
-                                x1={x}
-                                y1={yTop}
-                                x2={x}
-                                y2={yBottom}
-                                stroke="#D4AF37"
-                                strokeWidth={i === 0 ? "4" : "2"}
-                            />
-                        );
-                    })}
-
-                    {/* Marker dots sui tasti 3, 5, 7, 9, 15, 17, 19, 21 */}
-                    {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => {
-                        const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
-                        const y = fretboardHeightRight / 2;
-                        return (
-                            <circle
-                                key={`dot-${fret}`}
-                                cx={x}
-                                cy={y}
-                                r="6"
-                                fill="#F5F5DC"
-                                opacity="0.7"
-                            />
-                        );
-                    })}
-
-                    {/* Due dots sul 12° e 24° tasto */}
-                    {[12, 24].map(fret => {
-                        const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
-                        const y1 = fretboardHeightRight / 3;
-                        const y2 = (2 * fretboardHeightRight) / 3;
-                        return (
-                            <g key={`double-dot-${fret}`}>
-                                <circle cx={x} cy={y1} r="6" fill="#F5F5DC" opacity="0.7" />
-                                <circle cx={x} cy={y2} r="6" fill="#F5F5DC" opacity="0.7" />
-                            </g>
-                        );
-                    })}
-
-                    {/* Zone interattive per le note (incluso tasto 0 = corda a vuoto) */}
-                    {[...Array(strings)].map((_, stringIndex) => (
-                        [...Array(frets + 1)].map((_, fretIndex) => {
-                            const fretNum = fretIndex;
-                            const x = fretNum === 0
-                                ? fretboardOffsetX / 2
-                                : fretboardOffsetX + (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
-                            const y = getStringY(stringIndex, Math.max(0, x - fretboardOffsetX));
-                            const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
-                            const hoveredMidi = hoveredNote != null
-                                ? OPEN_STRING_MIDI[hoveredNote.string] + hoveredNote.fret
-                                : null;
-                            const thisMidi = OPEN_STRING_MIDI[stringIndex] + fretNum;
-                            const activeMidi = hoveredMidi ?? hoveredStaffMidi;
-                            const isSameNote = activeMidi != null
-                                && !isHovered
-                                && (thisMidi % 12) === (activeMidi % 12);
-                            const isStaffExactMatch = hoveredStaffMidi != null && hoveredNote == null && thisMidi === hoveredStaffMidi;
-
+                        {/* Corde */}
+                        {[...Array(strings)].map((_, i) => {
+                            const y1 = getStringY(i, 0);
+                            const y2 = getStringY(i, fretboardWidth);
+                            const thickness = 0.5 + i * 0.4; // Invertito: la prima corda è sottile, l'ultima grossa
                             return (
-                                <g key={`note-${stringIndex}-${fretNum}`}>
-                                    {/* Indicatore sempre visibile per la corda a vuoto */}
-                                    {fretNum === 0 && (
-                                        <circle
-                                            cx={x}
-                                            cy={y}
-                                            r="8"
-                                            fill="#fff"
-                                            stroke="#222"
-                                            strokeWidth="2"
-                                            style={{ pointerEvents: 'none' }}
-                                        />
-                                    )}
-                                    {/* Area invisibile per il mouse hover */}
-                                    <circle
-                                        cx={x}
-                                        cy={y}
-                                        r="20"
-                                        fill="transparent"
-                                        style={{ cursor: 'pointer' }}
-                                        onMouseEnter={() => setHoveredNote({ string: stringIndex, fret: fretNum })}
-                                        onMouseLeave={() => setHoveredNote(null)}
-                                        onClick={() => addNoteToStack(stringIndex, fretNum)}
-                                    />
-                                    {/* Cerchietto giallo visibile solo in hover diretto */}
-                                    {isHovered && (
-                                        <circle
-                                            cx={x}
-                                            cy={y}
-                                            r="12"
-                                            fill="yellow"
-                                            stroke="orange"
-                                            strokeWidth="2"
-                                            style={{ pointerEvents: 'none' }}
-                                        />
-                                    )}
-                                    {/* Cerchietto verde per la posizione esatta evidenziata dal pentagramma */}
-                                    {isStaffExactMatch && (
-                                        <circle
-                                            cx={x}
-                                            cy={y}
-                                            r="13"
-                                            fill="#4caf50"
-                                            fillOpacity="0.7"
-                                            stroke="#2e7d32"
-                                            strokeWidth="2"
-                                            style={{ pointerEvents: 'none' }}
-                                        />
-                                    )}
-                                    {/* Cerchietto arancione tenue per le note uguali (stessa classe) */}
-                                    {isSameNote && !isStaffExactMatch && (
-                                        <circle
-                                            cx={x}
-                                            cy={y}
-                                            r="10"
-                                            fill="orange"
-                                            fillOpacity="0.35"
-                                            stroke="orange"
-                                            strokeWidth="1.5"
-                                            style={{ pointerEvents: 'none' }}
-                                        />
-                                    )}
+                                <line
+                                    key={`string-${i}`}
+                                    x1="0"
+                                    y1={y1}
+                                    x2={totalWidth}
+                                    y2={y2}
+                                    stroke="#C0C0C0"
+                                    strokeWidth={thickness}
+                                />
+                            );
+                        })}
+
+                        {/* Tasti */}
+                        {[...Array(frets + 1)].map((_, i) => {
+                            const x = fretboardOffsetX + getFretPosition(i);
+                            const heightAtX = getHeightAtX(getFretPosition(i), fretboardWidth);
+                            const yTop = (fretboardHeightRight - heightAtX) / 2;
+                            const yBottom = yTop + heightAtX;
+                            return (
+                                <line
+                                    key={`fret-${i}`}
+                                    x1={x}
+                                    y1={yTop}
+                                    x2={x}
+                                    y2={yBottom}
+                                    stroke="#D4AF37"
+                                    strokeWidth={i === 0 ? "4" : "2"}
+                                />
+                            );
+                        })}
+
+                        {/* Marker dots sui tasti 3, 5, 7, 9, 15, 17, 19, 21 */}
+                        {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => {
+                            const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
+                            const y = fretboardHeightRight / 2;
+                            return (
+                                <circle
+                                    key={`dot-${fret}`}
+                                    cx={x}
+                                    cy={y}
+                                    r="6"
+                                    fill="#F5F5DC"
+                                    opacity="0.7"
+                                />
+                            );
+                        })}
+
+                        {/* Due dots sul 12° e 24° tasto */}
+                        {[12, 24].map(fret => {
+                            const x = fretboardOffsetX + (getFretPosition(fret - 1) + getFretPosition(fret)) / 2;
+                            const y1 = fretboardHeightRight / 3;
+                            const y2 = (2 * fretboardHeightRight) / 3;
+                            return (
+                                <g key={`double-dot-${fret}`}>
+                                    <circle cx={x} cy={y1} r="6" fill="#F5F5DC" opacity="0.7" />
+                                    <circle cx={x} cy={y2} r="6" fill="#F5F5DC" opacity="0.7" />
                                 </g>
                             );
-                        })
-                    ))}
-                </svg>
+                        })}
+
+                        {/* Zone interattive per le note (incluso tasto 0 = corda a vuoto) */}
+                        {[...Array(strings)].map((_, stringIndex) => (
+                            [...Array(frets + 1)].map((_, fretIndex) => {
+                                const fretNum = fretIndex;
+                                const x = fretNum === 0
+                                    ? fretboardOffsetX / 2
+                                    : fretboardOffsetX + (getFretPosition(fretNum - 1) + getFretPosition(fretNum)) / 2;
+                                const y = getStringY(stringIndex, Math.max(0, x - fretboardOffsetX));
+                                const isHovered = hoveredNote?.string === stringIndex && hoveredNote?.fret === fretNum;
+                                const hoveredMidi = hoveredNote != null
+                                    ? OPEN_STRING_MIDI[hoveredNote.string] + hoveredNote.fret
+                                    : null;
+                                const thisMidi = OPEN_STRING_MIDI[stringIndex] + fretNum;
+                                const activeMidi = hoveredMidi ?? hoveredStaffMidi;
+                                const isSameNote = activeMidi != null
+                                    && !isHovered
+                                    && (thisMidi % 12) === (activeMidi % 12);
+                                const isStaffExactMatch = hoveredStaffMidi != null && hoveredNote == null && thisMidi === hoveredStaffMidi;
+
+                                return (
+                                    <g key={`note-${stringIndex}-${fretNum}`}>
+                                        {/* Indicatore sempre visibile per la corda a vuoto */}
+                                        {fretNum === 0 && (
+                                            <circle
+                                                cx={x}
+                                                cy={y}
+                                                r="8"
+                                                fill="#fff"
+                                                stroke="#222"
+                                                strokeWidth="2"
+                                                style={{ pointerEvents: 'none' }}
+                                            />
+                                        )}
+                                        {/* Area invisibile per il mouse hover */}
+                                        <circle
+                                            cx={x}
+                                            cy={y}
+                                            r="20"
+                                            fill="transparent"
+                                            style={{ cursor: 'pointer' }}
+                                            onMouseEnter={() => setHoveredNote({ string: stringIndex, fret: fretNum })}
+                                            onMouseLeave={() => setHoveredNote(null)}
+                                            onClick={() => addNoteToStack(stringIndex, fretNum)}
+                                        />
+                                        {/* Cerchietto giallo visibile solo in hover diretto */}
+                                        {isHovered && (
+                                            <circle
+                                                cx={x}
+                                                cy={y}
+                                                r="12"
+                                                fill="yellow"
+                                                stroke="orange"
+                                                strokeWidth="2"
+                                                style={{ pointerEvents: 'none' }}
+                                            />
+                                        )}
+                                        {/* Cerchietto verde per la posizione esatta evidenziata dal pentagramma */}
+                                        {isStaffExactMatch && (
+                                            <circle
+                                                cx={x}
+                                                cy={y}
+                                                r="13"
+                                                fill="#4caf50"
+                                                fillOpacity="0.7"
+                                                stroke="#2e7d32"
+                                                strokeWidth="2"
+                                                style={{ pointerEvents: 'none' }}
+                                            />
+                                        )}
+                                        {/* Cerchietto arancione tenue per le note uguali (stessa classe) */}
+                                        {isSameNote && !isStaffExactMatch && (
+                                            <circle
+                                                cx={x}
+                                                cy={y}
+                                                r="10"
+                                                fill="orange"
+                                                fillOpacity="0.35"
+                                                stroke="orange"
+                                                strokeWidth="1.5"
+                                                style={{ pointerEvents: 'none' }}
+                                            />
+                                        )}
+                                    </g>
+                                );
+                            })
+                        ))}
+                    </svg>
+
+
+                </div>
             </div>
 
             {noteStack.length > 0 && (

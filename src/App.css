@@ -384,6 +384,11 @@
   padding: 12px;
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(75, 46, 19, 0.1), rgba(75, 46, 19, 0.02));
+
+  .wrapper {
+    margin: auto;
+    width: fit-content;
+  }
 }
 
 .fretboard-svg {
