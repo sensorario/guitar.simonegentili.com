@@ -93,6 +93,12 @@
   display: block;
 }
 
+.staff-panel__score svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .abcjs-note {
   cursor: pointer;
 }
@@ -416,6 +422,11 @@
   text-align: left;
 }
 
+.print-sheet-container {
+  display: none;
+  width: 100%;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100vw - 20px, 1380px);
@@ -454,24 +465,72 @@
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    margin: 12mm;
   }
 
-  .staff-panel,
-  .staff-panel * {
-    visibility: visible;
+  body {
+    background: #fff;
   }
 
-  .staff-panel {
-    position: fixed;
-    inset: 0;
+  .github-ribbon,
+  .app-hero,
+  .fretboard-toolbar,
+  .fretboard-shell,
+  .selected-note-label,
+  .staff-panel:not(.staff-panel--print) {
+    display: none !important;
+  }
+
+  .app-shell {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .guitar-page {
+    display: block;
+  }
+
+  .print-sheet-container {
+    display: block;
+  }
+
+  .print-sheet {
+    width: 100%;
+    overflow: visible;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .staff-panel--print {
     box-shadow: none;
+    border: none;
     border-radius: 0;
-    padding: 24px;
+    padding: 0;
+    background: transparent;
   }
 
-  .staff-panel__header {
+  .staff-panel--print .staff-panel__legend {
     display: none;
+  }
+
+  .staff-panel--print .staff-panel__score {
+    width: 100%;
+    overflow: visible;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .staff-panel--print .staff-panel__score svg {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    color: #000 !important;
   }
 }

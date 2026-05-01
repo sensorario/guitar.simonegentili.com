@@ -5,8 +5,14 @@ import configRepository from './repositories/ConfigRepository';
 const OPEN_STRING_MIDI = [64, 59, 55, 50, 45, 40];
 const NOTE_SEQUENCE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const ABC_NOTE_SEQUENCE = ['C', '^C', 'D', '^D', 'E', 'F', '^F', 'G', '^G', 'A', '^A', 'B'];
-const DEFAULT_MIN_MEASURES_PER_LINE = 2;
-const DEFAULT_MAX_MEASURES_PER_LINE = 4;
+const DEFAULT_MIN_MEASURES_PER_LINE = 3;
+const DEFAULT_MAX_MEASURES_PER_LINE = 3;
+const MAX_PRINT_STAFF_LINES_PER_PAGE = 10;
+const DEFAULT_PRINT_MEASURES_PER_PAGE = DEFAULT_MIN_MEASURES_PER_LINE * MAX_PRINT_STAFF_LINES_PER_PAGE;
+const PRINT_MARGIN_MM = 12;
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+const MM_TO_PX = 135 / 25.4;
 const DEFAULT_INSTRUMENT = 'piano';
 const DEFAULT_NOTE_DURATION = 'quarter';
 const DEFAULT_TIME_SIGNATURE = '4/4';
@@ -308,26 +314,20 @@ const clampToPositiveInteger = (value, fallbackValue) => {
     return parsedValue;
 };
 
-const splitMeasuresIntoLines = (measures, minMeasuresPerLine, maxMeasuresPerLine) => {
+const splitMeasuresIntoLines = (measures, maxMeasuresPerLine) => {
     const totalMeasures = measures.length;
 
     if (totalMeasures === 0) {
         return [];
     }
 
-    const minLines = Math.ceil(totalMeasures / maxMeasuresPerLine);
-    const maxLines = Math.max(1, Math.floor(totalMeasures / minMeasuresPerLine));
-    const linesCount = minLines <= maxLines ? minLines : minLines;
-
-    const baseLineSize = Math.floor(totalMeasures / linesCount);
-    const extraMeasures = totalMeasures % linesCount;
     const lines = [];
-    let cursor = 0;
+    const safeMax = Math.max(1, maxMeasuresPerLine);
 
-    for (let lineIndex = 0; lineIndex < linesCount; lineIndex += 1) {
-        const lineSize = baseLineSize + (lineIndex < extraMeasures ? 1 : 0);
-        lines.push(measures.slice(cursor, cursor + lineSize));
-        cursor += lineSize;
+    // Keep line length deterministic: max measures per line is enforced,
+    // only the last line can contain fewer measures.
+    for (let cursor = 0; cursor < totalMeasures; cursor += safeMax) {
+        lines.push(measures.slice(cursor, cursor + safeMax));
     }
 
     return lines;
@@ -390,7 +390,7 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine, timeSig
         sanitizedMin,
         clampToPositiveInteger(maxMeasuresPerLine, DEFAULT_MAX_MEASURES_PER_LINE)
     );
-    const measureLines = splitMeasuresIntoLines(measures, sanitizedMin, sanitizedMax);
+    const measureLines = splitMeasuresIntoLines(measures, sanitizedMax);
     const abcStaffLines = measureLines.map((line, lineIndex) => {
         const suffix = lineIndex === measureLines.length - 1 ? ' |]' : ' |';
         return `| ${line.join(' | ')}${suffix}`;
@@ -403,6 +403,68 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine, timeSig
         'K:C clef=treble',
         ...abcStaffLines
     ].join('\n');
+};
+
+const splitNotesIntoMeasures = (notes, timeSignature = '4/4') => {
+    const timeSigOption = TIME_SIGNATURE_OPTIONS.find((option) => option.value === timeSignature) ?? TIME_SIGNATURE_OPTIONS[0];
+    const unitsPerMeasure = timeSigOption.unitsPerMeasure;
+    const measures = [];
+    let currentMeasure = [];
+    let currentUnits = 0;
+
+    for (const note of notes) {
+        const durationUnits = getDurationOption(note.duration).abcUnits;
+
+        if (durationUnits > unitsPerMeasure) {
+            if (currentMeasure.length > 0) {
+                measures.push(currentMeasure);
+                currentMeasure = [];
+                currentUnits = 0;
+            }
+
+            measures.push([note]);
+            continue;
+        }
+
+        if (currentUnits + durationUnits > unitsPerMeasure) {
+            measures.push(currentMeasure);
+            currentMeasure = [];
+            currentUnits = 0;
+        }
+
+        currentMeasure.push(note);
+        currentUnits += durationUnits;
+
+        if (currentUnits === unitsPerMeasure) {
+            measures.push(currentMeasure);
+            currentMeasure = [];
+            currentUnits = 0;
+        }
+    }
+
+    if (currentMeasure.length > 0) {
+        measures.push(currentMeasure);
+    }
+
+    return measures;
+};
+
+const splitNotesForPrintPages = (notes, timeSignature, measuresPerPrintPage) => {
+    const measures = splitNotesIntoMeasures(notes, timeSignature);
+
+    if (measures.length === 0) {
+        return [notes];
+    }
+
+    const measuresPerPage = clampToPositiveInteger(measuresPerPrintPage, DEFAULT_PRINT_MEASURES_PER_PAGE);
+    const pages = [];
+
+    for (let cursor = 0; cursor < measures.length; cursor += measuresPerPage) {
+        const pageMeasures = measures.slice(cursor, cursor + measuresPerPage);
+        pages.push(pageMeasures.flat());
+    }
+
+    return pages;
 };
 
 function ToolbarIcon({ children }) {
@@ -506,8 +568,20 @@ function RestIcon({ duration, className = '' }) {
     );
 }
 
-function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresPerLine, noteDuration, timeSignature, onNoteHover }) {
+function StaffNotation({
+    notes,
+    formatNoteName,
+    minMeasuresPerLine,
+    maxMeasuresPerLine,
+    noteDuration,
+    timeSignature,
+    onNoteHover,
+    showLegend = true,
+    panelClassName = '',
+    interactive = true
+}) {
     const notationContainerRef = React.useRef(null);
+    const [staffWidth, setStaffWidth] = React.useState(860);
     const durationOption = React.useMemo(() => getDurationOption(noteDuration), [noteDuration]);
     const abcNotation = React.useMemo(
         () => buildAbcNotation(notes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature),
@@ -515,6 +589,34 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
     );
     // noteOnly: stack items that are pitched notes (not rests)
     const noteOnlyStack = React.useMemo(() => notes.filter((n) => !n.isRest), [notes]);
+
+    React.useEffect(() => {
+        const container = notationContainerRef.current;
+        if (!container) {
+            return;
+        }
+
+        const updateWidth = () => {
+            const nextWidth = Math.max(320, Math.floor(container.clientWidth) - 20);
+            setStaffWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
+        };
+
+        updateWidth();
+
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateWidth);
+            return () => {
+                window.removeEventListener('resize', updateWidth);
+            };
+        }
+
+        const observer = new ResizeObserver(updateWidth);
+        observer.observe(container);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, []);
 
     React.useEffect(() => {
         if (!notationContainerRef.current) {
@@ -526,47 +628,47 @@ function StaffNotation({ notes, formatNoteName, minMeasuresPerLine, maxMeasuresP
             if (cancelled || !notationContainerRef.current) return;
 
             abcjs.renderAbc(notationContainerRef.current, abcNotation, {
-                responsive: 'resize',
-                staffwidth: 920,
+                staffwidth: staffWidth,
                 add_classes: true,
-                wrap: {
-                    minSpacing: 1.8,
-                    maxSpacing: 2.8
-                }
+                scale: 1
             });
 
             // Attach hover listeners to rendered note elements
-            const noteEls = notationContainerRef.current.querySelectorAll('.abcjs-note');
-            noteEls.forEach((el, i) => {
-                const stackNote = noteOnlyStack[i];
-                if (!stackNote) return;
-                const handler = () => onNoteHover?.(stackNote.midi);
-                const clearHandler = () => onNoteHover?.(null);
-                el.addEventListener('mouseenter', handler);
-                el.addEventListener('mouseleave', clearHandler);
-            });
+            if (interactive) {
+                const noteEls = notationContainerRef.current.querySelectorAll('.abcjs-note');
+                noteEls.forEach((el, i) => {
+                    const stackNote = noteOnlyStack[i];
+                    if (!stackNote) return;
+                    const handler = () => onNoteHover?.(stackNote.midi);
+                    const clearHandler = () => onNoteHover?.(null);
+                    el.addEventListener('mouseenter', handler);
+                    el.addEventListener('mouseleave', clearHandler);
+                });
+            }
         });
 
         return () => { cancelled = true; };
-    }, [abcNotation, noteOnlyStack, onNoteHover]);
+    }, [abcNotation, noteOnlyStack, onNoteHover, interactive, staffWidth]);
 
     return (
-        <div className="staff-panel">
+        <div className={`staff-panel ${panelClassName}`.trim()}>
             <div
                 ref={notationContainerRef}
                 className="staff-panel__score"
                 role="img"
                 aria-label="Pentagramma con battute delle note selezionate"
             />
-            <p className="staff-panel__legend">
-                Mostrate {notes.length} note in battute da {timeSignature}.
-                {' '}
-                Durata selezionata: {durationOption.label}.
-                {' '}
-                Range battute/riga: min {minMeasuresPerLine}, max {maxMeasuresPerLine}.
-                {' '}
-                {notes.length > 0 && `Ultimo elemento: ${getStackItemLabel(notes[notes.length - 1], formatNoteName)}.`}
-            </p>
+            {showLegend && (
+                <p className="staff-panel__legend">
+                    Mostrate {notes.length} note in battute da {timeSignature}.
+                    {' '}
+                    Durata selezionata: {durationOption.label}.
+                    {' '}
+                    Range battute/riga: min {minMeasuresPerLine}, max {maxMeasuresPerLine}.
+                    {' '}
+                    {notes.length > 0 && `Ultimo elemento: ${getStackItemLabel(notes[notes.length - 1], formatNoteName)}.`}
+                </p>
+            )}
         </div>
     );
 }
@@ -582,8 +684,11 @@ function GuitarFretboard() {
     const [bpm, setBpm] = React.useState(120);
     const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
+    const [printMeasuresPerPage, setPrintMeasuresPerPage] = React.useState(DEFAULT_PRINT_MEASURES_PER_PAGE);
     const synthRef = React.useRef(null);
     const playbackActiveRef = React.useRef(false);
+    const abcjsRef = React.useRef(null);
+    const printContainerRef = React.useRef(null);
     const [savedSongs, setSavedSongs] = React.useState(() => {
         try {
             return JSON.parse(localStorage.getItem(SONGS_STORAGE_KEY) ?? '{}');
@@ -649,6 +754,97 @@ function GuitarFretboard() {
         return useItalianNotation ? noteToItalian[noteName] : noteName;
     };
 
+    const printPages = React.useMemo(
+        () => splitNotesForPrintPages(noteStack, timeSignature, printMeasuresPerPage),
+        [noteStack, timeSignature, printMeasuresPerPage]
+    );
+
+    const handlePrint = React.useCallback(async () => {
+        if (!abcjsRef.current) {
+            const { default: abcjs } = await import('abcjs');
+            abcjsRef.current = abcjs;
+        }
+
+        const abcjs = abcjsRef.current;
+        const container = printContainerRef.current;
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        const printableWidthPx = Math.floor((A4_WIDTH_MM - (PRINT_MARGIN_MM * 2)) * MM_TO_PX);
+        const printableHeightPx = Math.floor((A4_HEIGHT_MM - (PRINT_MARGIN_MM * 2)) * MM_TO_PX);
+
+        // Render off-screen but visible, so abcjs can fully layout note glyphs before printing.
+        container.style.display = 'block';
+        container.style.position = 'fixed';
+        container.style.left = '-10000px';
+        container.style.top = '0';
+        container.style.width = `${printableWidthPx}px`;
+
+        for (const pageNotes of printPages) {
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'print-sheet';
+            const scoreDiv = document.createElement('div');
+            scoreDiv.className = 'staff-panel staff-panel--print';
+            const innerDiv = document.createElement('div');
+            innerDiv.className = 'staff-panel__score';
+            scoreDiv.appendChild(innerDiv);
+            pageDiv.appendChild(scoreDiv);
+            container.appendChild(pageDiv);
+
+            const notation = buildAbcNotation(pageNotes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature);
+            let scale = 1;
+
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+                innerDiv.innerHTML = '';
+                abcjs.renderAbc(innerDiv, notation, {
+                    staffwidth: printableWidthPx - 8,
+                    add_classes: true,
+                    scale
+                });
+
+                const svg = innerDiv.querySelector('svg');
+                const renderedHeight = svg?.getBBox?.().height ?? innerDiv.scrollHeight;
+                if (renderedHeight <= printableHeightPx - 10) {
+                    break;
+                }
+
+                const fitFactor = (printableHeightPx - 10) / renderedHeight;
+                if (fitFactor >= 0.98) {
+                    break;
+                }
+
+                scale = Math.max(0.75, scale * fitFactor);
+            }
+        }
+
+        // Let browser paint and settle font metrics before opening print preview.
+        if (document.fonts?.ready) {
+            await document.fonts.ready;
+        }
+        await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+
+        // Switch back to normal flow before printing, otherwise off-screen styles
+        // keep the score outside the printable area.
+        container.style.position = '';
+        container.style.left = '';
+        container.style.top = '';
+        container.style.width = '';
+        await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+
+        const cleanupPrintContainer = () => {
+            container.innerHTML = '';
+            container.style.display = '';
+            container.style.position = '';
+            container.style.left = '';
+            container.style.top = '';
+            container.style.width = '';
+        };
+        window.addEventListener('afterprint', cleanupPrintContainer, { once: true });
+
+        window.print();
+    }, [printPages, minMeasuresPerLine, maxMeasuresPerLine, timeSignature]);
+
     const handleMinMeasuresChange = (event) => {
         const nextMin = clampToPositiveInteger(event.target.value, DEFAULT_MIN_MEASURES_PER_LINE);
         setMinMeasuresPerLine(nextMin);
@@ -658,6 +854,11 @@ function GuitarFretboard() {
     const handleMaxMeasuresChange = (event) => {
         const nextMax = clampToPositiveInteger(event.target.value, DEFAULT_MAX_MEASURES_PER_LINE);
         setMaxMeasuresPerLine(Math.max(nextMax, minMeasuresPerLine));
+    };
+
+    const handlePrintMeasuresPerPageChange = (event) => {
+        const nextValue = clampToPositiveInteger(event.target.value, DEFAULT_PRINT_MEASURES_PER_PAGE);
+        setPrintMeasuresPerPage(nextValue);
     };
 
     const addNoteToStack = (stringIndex, fret) => {
@@ -920,6 +1121,16 @@ function GuitarFretboard() {
                             onChange={handleMaxMeasuresChange}
                         />
                     </label>
+                    <label>
+                        Battute/pagina stampa
+                        <input
+                            type="number"
+                            min="1"
+                            max="128"
+                            value={printMeasuresPerPage}
+                            onChange={handlePrintMeasuresPerPageChange}
+                        />
+                    </label>
                 </div>
 
                 <span className="editor-toolbar__divider" aria-hidden="true"></span>
@@ -1073,7 +1284,7 @@ function GuitarFretboard() {
                     </button>
                     <button
                         type="button"
-                        onClick={() => window.print()}
+                        onClick={handlePrint}
                         disabled={noteStack.length === 0}
                         className="stack-button"
                         aria-label="Stampa spartito"
@@ -1275,6 +1486,8 @@ function GuitarFretboard() {
                 timeSignature={timeSignature}
                 onNoteHover={setHoveredStaffMidi}
             />
+
+            <div className="print-sheet-container" ref={printContainerRef} aria-hidden="true" />
         </div>
     );
 }
