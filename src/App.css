@@ -109,6 +109,14 @@
   filter: drop-shadow(0 0 3px rgba(76, 175, 80, 0.9));
 }
 
+.abcjs-note--playing path,
+.abcjs-note--playing ellipse,
+.abcjs-note--playing rect {
+  fill: #1e88e5 !important;
+  stroke: #1e88e5 !important;
+  filter: drop-shadow(0 0 4px rgba(30, 136, 229, 0.85));
+}
+
 .fretboard-toolbar {
   display: flex;
   align-items: center;
@@ -409,6 +417,7 @@
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(75, 46, 19, 0.1), rgba(75, 46, 19, 0.02));
   box-shadow: 0 -8px 24px rgba(67, 42, 18, 0.12);
+  pointer-events: auto;
 
   .wrapper {
     margin: auto;
@@ -418,6 +427,7 @@
 
 .fretboard-svg {
   display: block;
+  pointer-events: auto;
 }
 
 .selected-note-label {

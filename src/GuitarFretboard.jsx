@@ -576,6 +576,7 @@ function StaffNotation({
     noteDuration,
     timeSignature,
     onNoteHover,
+    playingNoteVisualIndex = null,
     showLegend = true,
     panelClassName = '',
     interactive = true
@@ -633,22 +634,28 @@ function StaffNotation({
                 scale: 1
             });
 
-            // Attach hover listeners to rendered note elements
-            if (interactive) {
-                const noteEls = notationContainerRef.current.querySelectorAll('.abcjs-note');
-                noteEls.forEach((el, i) => {
-                    const stackNote = noteOnlyStack[i];
-                    if (!stackNote) return;
-                    const handler = () => onNoteHover?.(stackNote.midi);
-                    const clearHandler = () => onNoteHover?.(null);
-                    el.addEventListener('mouseenter', handler);
-                    el.addEventListener('mouseleave', clearHandler);
-                });
-            }
+            const noteEls = notationContainerRef.current.querySelectorAll('.abcjs-note');
+            noteEls.forEach((el, i) => {
+                el.classList.toggle('abcjs-note--playing', playingNoteVisualIndex === i);
+
+                if (!interactive) {
+                    return;
+                }
+
+                const stackNote = noteOnlyStack[i];
+                if (!stackNote) {
+                    return;
+                }
+
+                const handler = () => onNoteHover?.(stackNote.midi);
+                const clearHandler = () => onNoteHover?.(null);
+                el.addEventListener('mouseenter', handler);
+                el.addEventListener('mouseleave', clearHandler);
+            });
         });
 
         return () => { cancelled = true; };
-    }, [abcNotation, noteOnlyStack, onNoteHover, interactive, staffWidth]);
+    }, [abcNotation, noteOnlyStack, onNoteHover, interactive, staffWidth, playingNoteVisualIndex]);
 
     return (
         <div className={`staff-panel ${panelClassName}`.trim()}>
@@ -682,6 +689,8 @@ function GuitarFretboard() {
     const [noteDuration, setNoteDuration] = React.useState(DEFAULT_NOTE_DURATION);
     const [timeSignature, setTimeSignature] = React.useState(DEFAULT_TIME_SIGNATURE);
     const [bpm, setBpm] = React.useState(120);
+    const [playingStaffMidi, setPlayingStaffMidi] = React.useState(null);
+    const [playingNoteVisualIndex, setPlayingNoteVisualIndex] = React.useState(null);
     const [minMeasuresPerLine, setMinMeasuresPerLine] = React.useState(DEFAULT_MIN_MEASURES_PER_LINE);
     const [maxMeasuresPerLine, setMaxMeasuresPerLine] = React.useState(DEFAULT_MAX_MEASURES_PER_LINE);
     const [printMeasuresPerPage, setPrintMeasuresPerPage] = React.useState(DEFAULT_PRINT_MEASURES_PER_PAGE);
@@ -889,15 +898,18 @@ function GuitarFretboard() {
         setPrintMeasuresPerPage(nextValue);
     };
 
-    const addNoteToStack = (stringIndex, fret) => {
-        const midi = OPEN_STRING_MIDI[stringIndex] + fret;
-        const pitch = getPitchFromMidi(midi);
-        const duration = noteDuration;
-
+    const handleFretboardMouseEnter = () => {
+        console.log('🎸 handleFretboardMouseEnter scatenato');
         window.scrollTo({
             top: document.body.scrollHeight,
             behavior: 'smooth'
         });
+    };
+
+    const addNoteToStack = (stringIndex, fret) => {
+        const midi = OPEN_STRING_MIDI[stringIndex] + fret;
+        const pitch = getPitchFromMidi(midi);
+        const duration = noteDuration;
 
         setNoteStack((currentStack) => [
             ...currentStack,
@@ -926,16 +938,33 @@ function GuitarFretboard() {
         setNoteStack((currentStack) => currentStack.slice(0, -1));
     };
 
-    const saveSong = () => {
+    const saveSong = async () => {
         const name = window.prompt('Nome della canzone:', selectedSong || '');
         if (!name || name.trim() === '') return;
         const trimmed = name.trim();
         const updated = { ...savedSongs, [trimmed]: noteStack };
         try {
             localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(updated));
+
         } catch {
             // storage full — silently ignore
         }
+
+        try {
+            await fetch('https://api.simonegentili.com/guitar/songs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: trimmed,
+                    notes: noteStack
+                })
+            });
+        } catch {
+            // ignore network errors to avoid blocking local save
+        }
+
         setSavedSongs(updated);
         setSelectedSong(trimmed);
     };
@@ -962,6 +991,8 @@ function GuitarFretboard() {
     const stopPlayback = React.useCallback(() => {
         playbackActiveRef.current = false;
         setIsPlaying(false);
+        setPlayingStaffMidi(null);
+        setPlayingNoteVisualIndex(null);
 
         if (synthRef.current) {
             synthRef.current.stop();
@@ -982,8 +1013,11 @@ function GuitarFretboard() {
 
         setIsPlaying(true);
         playbackActiveRef.current = true;
+        setPlayingStaffMidi(null);
+        setPlayingNoteVisualIndex(null);
 
         const msPerQuarter = 60000 / bpm;
+        let visualNoteIndex = 0;
 
         try {
             for (const note of noteStack) {
@@ -993,13 +1027,21 @@ function GuitarFretboard() {
 
                 const durationOption = getDurationOption(note.duration);
                 if (!note.isRest) {
+                    setPlayingStaffMidi(note.midi);
+                    setPlayingNoteVisualIndex(visualNoteIndex);
+                    visualNoteIndex += 1;
                     synthRef.current.playNote(note.displayMidi, durationOption.tone);
+                } else {
+                    setPlayingStaffMidi(null);
+                    setPlayingNoteVisualIndex(null);
                 }
                 await new Promise((resolve) => window.setTimeout(resolve, msPerQuarter * durationOption.beats));
             }
         } finally {
             playbackActiveRef.current = false;
             setIsPlaying(false);
+            setPlayingStaffMidi(null);
+            setPlayingNoteVisualIndex(null);
         }
     }, [instrument, isPlaying, noteStack, bpm]);
 
@@ -1339,6 +1381,7 @@ function GuitarFretboard() {
                     noteDuration={noteDuration}
                     timeSignature={timeSignature}
                     onNoteHover={setHoveredStaffMidi}
+                    playingNoteVisualIndex={playingNoteVisualIndex}
                 />
                 <div ref={staffBottomAnchorRef} aria-hidden="true" />
             </div>
@@ -1352,8 +1395,8 @@ function GuitarFretboard() {
             )}
 
             <div className="fretboard-shell" ref={fretboardShellRef}>
-                <div className="wrapper">
-                    <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg">
+                <div className="wrapper" onMouseEnter={handleFretboardMouseEnter}>
+                    <svg width={totalWidth} height={fretboardHeightRight} xmlns="http://www.w3.org/2000/svg" className="fretboard-svg" onMouseEnter={handleFretboardMouseEnter}>
                         {/* Sfondo della tastiera a forma di trapezio */}
                         <polygon
                             points={`${fretboardOffsetX},${(fretboardHeightRight - fretboardHeightLeft) / 2} 
@@ -1444,11 +1487,12 @@ function GuitarFretboard() {
                                     ? OPEN_STRING_MIDI[hoveredNote.string] + hoveredNote.fret
                                     : null;
                                 const thisMidi = OPEN_STRING_MIDI[stringIndex] + fretNum;
-                                const activeMidi = hoveredMidi ?? hoveredStaffMidi;
+                                const activeMidi = hoveredMidi ?? hoveredStaffMidi ?? playingStaffMidi;
                                 const isSameNote = activeMidi != null
                                     && !isHovered
                                     && (thisMidi % 12) === (activeMidi % 12);
-                                const isStaffExactMatch = hoveredStaffMidi != null && hoveredNote == null && thisMidi === hoveredStaffMidi;
+                                const highlightedExactMidi = hoveredStaffMidi ?? playingStaffMidi;
+                                const isStaffExactMatch = highlightedExactMidi != null && hoveredNote == null && thisMidi === highlightedExactMidi;
 
                                 return (
                                     <g key={`note-${stringIndex}-${fretNum}`}>
