@@ -702,7 +702,7 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
     const fretboardShellRef = React.useRef(null);
     const previousStackLengthRef = React.useRef(0);
     const [savedSongs, setSavedSongs] = React.useState([]);
-    const [selectedSong, setSelectedSong] = React.useState('');
+    const [selectedSongId, setSelectedSongId] = React.useState('');
     // Solo le canzoni dell'utente autenticato vanno mostrate: se il logout arriva
     // mentre `savedSongs` contiene ancora l'ultima risposta fetchata, questa derivata
     // la nasconde subito, senza bisogno di un reset sincrono dentro un effect.
@@ -713,11 +713,13 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
             const res = await fetch('https://api.simonegentili.com/guitar/songs', {
                 headers: { Authorization: `Bearer ${authToken}` }
             });
-            if (!res.ok) return;
+            if (!res.ok) return null;
             const songs = await res.json();
             setSavedSongs(songs);
+            return songs;
         } catch {
             // ignore network errors, select stays as-is
+            return null;
         }
     };
 
@@ -975,9 +977,11 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
             return;
         }
 
-        const name = window.prompt('Nome della canzone:', selectedSong || '');
+        const currentSong = visibleSongs.find((s) => s.id === selectedSongId);
+        const name = window.prompt('Nome della canzone:', currentSong?.name || '');
         if (!name || name.trim() === '') return;
         const trimmed = name.trim();
+        const previousIds = new Set(visibleSongs.map((s) => s.id));
 
         try {
             await fetch('https://api.simonegentili.com/guitar/songs', {
@@ -995,15 +999,16 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
             // ignore network errors
         }
 
-        await fetchSongs();
-        setSelectedSong(trimmed);
+        const songs = await fetchSongs();
+        const created = songs?.find((s) => s.name === trimmed && !previousIds.has(s.id));
+        setSelectedSongId(created ? created.id : '');
     };
 
-    const loadSong = (name) => {
-        const song = visibleSongs.find((s) => s.name === name);
+    const loadSong = (id) => {
+        const song = visibleSongs.find((s) => s.id === id);
         if (!song) return;
         setNoteStack(song.value);
-        setSelectedSong(name);
+        setSelectedSongId(id);
     };
 
     const stopPlayback = React.useCallback(() => {
@@ -1231,7 +1236,7 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
                 <div className="editor-toolbar__group editor-toolbar__group--songs">
                     <select
                         className="song-select"
-                        value={selectedSong}
+                        value={selectedSongId}
                         onChange={(e) => loadSong(e.target.value)}
                         disabled={isPlaying || visibleSongs.length === 0}
                         aria-label="Carica canzone"
@@ -1239,7 +1244,7 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
                     >
                         <option value="">-- Canzoni salvate --</option>
                         {visibleSongs.map((song) => (
-                            <option key={song.id} value={song.name}>{song.name}</option>
+                            <option key={song.id} value={song.id}>{song.name}</option>
                         ))}
                     </select>
                     <button
