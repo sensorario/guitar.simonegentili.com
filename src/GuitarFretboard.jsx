@@ -978,9 +978,14 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
         }
 
         const currentSong = visibleSongs.find((s) => s.id === selectedSongId);
-        const name = window.prompt('Nome della canzone:', currentSong?.name || '');
-        if (!name || name.trim() === '') return;
-        const trimmed = name.trim();
+
+        let trimmed;
+        if (!currentSong) {
+            const name = window.prompt('Nome della canzone:', '');
+            if (!name || name.trim() === '') return;
+            trimmed = name.trim();
+        }
+
         const previousIds = new Set(visibleSongs.map((s) => s.id));
 
         try {
@@ -991,12 +996,19 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
                     Authorization: `Bearer ${authToken}`
                 },
                 body: JSON.stringify({
-                    name: trimmed,
+                    ...(currentSong ? { id: currentSong.id } : {}),
+                    name: currentSong ? currentSong.name : trimmed,
                     notes: noteStack
                 })
             });
         } catch {
             // ignore network errors
+        }
+
+        if (currentSong) {
+            await fetchSongs();
+            setSelectedSongId(currentSong.id);
+            return;
         }
 
         const songs = await fetchSongs();
