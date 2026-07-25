@@ -1023,6 +1023,39 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
         setSelectedSongId(id);
     };
 
+    const newSong = () => {
+        setNoteStack([]);
+        setSelectedSongId('');
+    };
+
+    const renameSong = async () => {
+        const currentSong = visibleSongs.find((s) => s.id === selectedSongId);
+        if (!currentSong) return;
+
+        const name = window.prompt('Nuovo nome della canzone:', currentSong.name);
+        if (!name || name.trim() === '' || name.trim() === currentSong.name) return;
+        const trimmed = name.trim();
+
+        try {
+            await fetch('https://api.simonegentili.com/guitar/songs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    id: currentSong.id,
+                    name: trimmed,
+                    notes: currentSong.value
+                })
+            });
+        } catch {
+            // ignore network errors
+        }
+
+        await fetchSongs();
+    };
+
     const stopPlayback = React.useCallback(() => {
         playbackActiveRef.current = false;
         setIsPlaying(false);
@@ -1246,6 +1279,18 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
                 <span className="editor-toolbar__divider" aria-hidden="true"></span>
 
                 <div className="editor-toolbar__group editor-toolbar__group--songs">
+                    <button
+                        type="button"
+                        onClick={newSong}
+                        disabled={isPlaying}
+                        className="stack-button"
+                        aria-label="Nuova canzone"
+                        title="Nuova canzone"
+                    >
+                        <ToolbarIcon>
+                            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </ToolbarIcon>
+                    </button>
                     <select
                         className="song-select"
                         value={selectedSongId}
@@ -1269,6 +1314,18 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
                     >
                         <ToolbarIcon>
                             <path d="M4 4h13l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4zm5 14h6v-5H9v5zM8 4v5h8V4H8z" fill="currentColor" />
+                        </ToolbarIcon>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={renameSong}
+                        disabled={!selectedSongId || isPlaying}
+                        className="stack-button"
+                        aria-label="Rinomina canzone"
+                        title="Rinomina canzone"
+                    >
+                        <ToolbarIcon>
+                            <path d="M4 20h4L18.5 9.5a2.121 2.121 0 0 0-3-3L5 17v3z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </ToolbarIcon>
                     </button>
                     <button
