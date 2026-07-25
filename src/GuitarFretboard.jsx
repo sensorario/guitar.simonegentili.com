@@ -44,7 +44,6 @@ const DURATION_OPTIONS = [
     { value: 'sixteenth', label: 'Semicroma', beats: 0.25, abcUnits: 1, tone: '16n' }
 ];
 const REST_OPTIONS = DURATION_OPTIONS;
-const SONGS_STORAGE_KEY = 'guitar-songs';
 
 const getDurationOption = (value) => {
     return DURATION_OPTIONS.find((option) => option.value === value) ?? DURATION_OPTIONS[2];
@@ -680,7 +679,7 @@ function StaffNotation({
     );
 }
 
-function GuitarFretboard() {
+function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
     const [hoveredNote, setHoveredNote] = React.useState(null);
     const [hoveredStaffMidi, setHoveredStaffMidi] = React.useState(null);
     const [noteStack, setNoteStack] = React.useState([]);
@@ -702,14 +701,46 @@ function GuitarFretboard() {
     const staffBottomAnchorRef = React.useRef(null);
     const fretboardShellRef = React.useRef(null);
     const previousStackLengthRef = React.useRef(0);
-    const [savedSongs, setSavedSongs] = React.useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem(SONGS_STORAGE_KEY) ?? '{}');
-        } catch {
-            return {};
-        }
-    });
+    const [savedSongs, setSavedSongs] = React.useState([]);
     const [selectedSong, setSelectedSong] = React.useState('');
+    // Solo le canzoni dell'utente autenticato vanno mostrate: se il logout arriva
+    // mentre `savedSongs` contiene ancora l'ultima risposta fetchata, questa derivata
+    // la nasconde subito, senza bisogno di un reset sincrono dentro un effect.
+    const visibleSongs = isAuthenticated ? savedSongs : [];
+
+    const fetchSongs = async () => {
+        try {
+            const res = await fetch('https://api.simonegentili.com/guitar/songs', {
+                headers: { Authorization: `Bearer ${authToken}` }
+            });
+            if (!res.ok) return;
+            const songs = await res.json();
+            setSavedSongs(songs);
+        } catch {
+            // ignore network errors, select stays as-is
+        }
+    };
+
+    React.useEffect(() => {
+        if (!isAuthenticated) return;
+
+        let cancelled = false;
+
+        fetch('https://api.simonegentili.com/guitar/songs', {
+            headers: { Authorization: `Bearer ${authToken}` }
+        })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((songs) => {
+                if (!cancelled && songs) setSavedSongs(songs);
+            })
+            .catch(() => {
+                // ignore network errors, select stays as-is
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isAuthenticated, authToken]);
     const [useItalianNotation, setUseItalianNotation] = React.useState(() => {
         // Carica la configurazione all'avvio
         const config = configRepository.load();
@@ -939,22 +970,21 @@ function GuitarFretboard() {
     };
 
     const saveSong = async () => {
+        if (!isAuthenticated) {
+            onRequireLogin?.();
+            return;
+        }
+
         const name = window.prompt('Nome della canzone:', selectedSong || '');
         if (!name || name.trim() === '') return;
         const trimmed = name.trim();
-        const updated = { ...savedSongs, [trimmed]: noteStack };
-        try {
-            localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(updated));
-
-        } catch {
-            // storage full — silently ignore
-        }
 
         try {
             await fetch('https://api.simonegentili.com/guitar/songs', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${authToken}`
                 },
                 body: JSON.stringify({
                     name: trimmed,
@@ -962,30 +992,18 @@ function GuitarFretboard() {
                 })
             });
         } catch {
-            // ignore network errors to avoid blocking local save
+            // ignore network errors
         }
 
-        setSavedSongs(updated);
+        await fetchSongs();
         setSelectedSong(trimmed);
     };
 
     const loadSong = (name) => {
-        if (!name || !savedSongs[name]) return;
-        setNoteStack(savedSongs[name]);
+        const song = visibleSongs.find((s) => s.name === name);
+        if (!song) return;
+        setNoteStack(JSON.parse(song.value));
         setSelectedSong(name);
-    };
-
-    const deleteSong = () => {
-        if (!selectedSong || !savedSongs[selectedSong]) return;
-        const updated = { ...savedSongs };
-        delete updated[selectedSong];
-        try {
-            localStorage.setItem(SONGS_STORAGE_KEY, JSON.stringify(updated));
-        } catch {
-            // ignore
-        }
-        setSavedSongs(updated);
-        setSelectedSong('');
     };
 
     const stopPlayback = React.useCallback(() => {
@@ -1215,13 +1233,13 @@ function GuitarFretboard() {
                         className="song-select"
                         value={selectedSong}
                         onChange={(e) => loadSong(e.target.value)}
-                        disabled={isPlaying || Object.keys(savedSongs).length === 0}
+                        disabled={isPlaying || visibleSongs.length === 0}
                         aria-label="Carica canzone"
                         title="Carica canzone salvata"
                     >
                         <option value="">-- Canzoni salvate --</option>
-                        {Object.keys(savedSongs).map((name) => (
-                            <option key={name} value={name}>{name}</option>
+                        {visibleSongs.map((song) => (
+                            <option key={song.id} value={song.name}>{song.name}</option>
                         ))}
                     </select>
                     <button
@@ -1238,11 +1256,10 @@ function GuitarFretboard() {
                     </button>
                     <button
                         type="button"
-                        onClick={deleteSong}
-                        disabled={isPlaying || !selectedSong || !savedSongs[selectedSong]}
+                        disabled
                         className="stack-button stack-button--danger"
                         aria-label="Elimina canzone salvata"
-                        title="Elimina canzone salvata"
+                        title="Eliminazione non ancora disponibile per le canzoni salvate nell'account"
                     >
                         <ToolbarIcon>
                             <path d="M4 7H20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

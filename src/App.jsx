@@ -1,5 +1,5 @@
 import { SGFooter, QuadratoHeader } from '@sensorario/sg-components'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import './App.css'
 import GuitarFretboard from './GuitarFretboard'
 
@@ -8,6 +8,8 @@ import GuitarFretboard from './GuitarFretboard'
 const AUTH_URL = 'https://api.simonegentili.com/quadrato/authenticate'
 const COOKIE_NAME = 'simonegentili.com-access-token'
 const USERNAME_KEY = 'simonegentili.com-username'
+// Chiave usata prima che le canzoni fossero legate all'account: da ripulire al logout.
+const LEGACY_SONGS_STORAGE_KEY = 'guitar-songs'
 
 function setAuthCookie(token) {
   document.cookie = `${COOKIE_NAME}=${token}; path=/; domain=.simonegentili.com; secure; samesite=strict`
@@ -17,8 +19,15 @@ function clearAuthCookie() {
   document.cookie = `${COOKIE_NAME}=; path=/; domain=.simonegentili.com; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=strict`
 }
 
+function getAuthToken() {
+  const entry = document.cookie.split('; ').find((e) => e.startsWith(`${COOKIE_NAME}=`))
+  return entry ? entry.slice(COOKIE_NAME.length + 1) : null
+}
+
 function App() {
   const [username, setUsername] = useState(() => localStorage.getItem(USERNAME_KEY))
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const headerRef = useRef(null)
 
   const handleLogin = async (loginUsername, password) => {
     const res = await fetch(AUTH_URL, {
@@ -38,6 +47,7 @@ function App() {
   const handleLogout = () => {
     clearAuthCookie()
     localStorage.removeItem(USERNAME_KEY)
+    localStorage.removeItem(LEGACY_SONGS_STORAGE_KEY)
     setUsername(null)
   }
 
@@ -63,12 +73,18 @@ function App() {
           />
         </a>
         <QuadratoHeader
+          ref={headerRef}
           title="guitar.simonegentili.com"
           username={username}
           onLogin={handleLogin}
           onLogout={handleLogout}
+          onUserAuthenticated={(authenticated) => setIsAuthenticated(authenticated)}
         />
-        <GuitarFretboard />
+        <GuitarFretboard
+          isAuthenticated={isAuthenticated}
+          authToken={getAuthToken()}
+          onRequireLogin={() => headerRef.current?.openLoginModal()}
+        />
       </main>
       <SGFooter />
     </>
