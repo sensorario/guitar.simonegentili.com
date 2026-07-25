@@ -332,14 +332,16 @@ const splitMeasuresIntoLines = (measures, maxMeasuresPerLine) => {
     return lines;
 };
 
-const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature = '4/4') => {
+const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature = '4/4', title = null) => {
     const timeSigOption = TIME_SIGNATURE_OPTIONS.find((o) => o.value === timeSignature) ?? TIME_SIGNATURE_OPTIONS[0];
     const unitsPerMeasure = timeSigOption.unitsPerMeasure;
     const visibleNotes = notes;
+    const titleLines = title ? [`T:${title.replace(/\n/g, ' ')}`] : [];
 
     if (visibleNotes.length === 0) {
         return [
             'X:1',
+            ...titleLines,
             `M:${timeSignature}`,
             'L:1/16',
             'K:C clef=treble',
@@ -397,6 +399,7 @@ const buildAbcNotation = (notes, minMeasuresPerLine, maxMeasuresPerLine, timeSig
 
     return [
         'X:1',
+        ...titleLines,
         `M:${timeSignature}`,
         'L:1/16',
         'K:C clef=treble',
@@ -851,7 +854,10 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
         container.style.top = '0';
         container.style.width = `${printableWidthPx}px`;
 
-        for (const pageNotes of printPages) {
+        const currentSong = isAuthenticated ? savedSongs.find((s) => s.id === selectedSongId) : null;
+        const songTitle = currentSong?.name ?? null;
+
+        printPages.forEach((pageNotes, pageIndex) => {
             const pageDiv = document.createElement('div');
             pageDiv.className = 'print-sheet';
             const scoreDiv = document.createElement('div');
@@ -862,7 +868,13 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
             pageDiv.appendChild(scoreDiv);
             container.appendChild(pageDiv);
 
-            const notation = buildAbcNotation(pageNotes, minMeasuresPerLine, maxMeasuresPerLine, timeSignature);
+            const notation = buildAbcNotation(
+                pageNotes,
+                minMeasuresPerLine,
+                maxMeasuresPerLine,
+                timeSignature,
+                pageIndex === 0 ? songTitle : null
+            );
             let scale = 1;
 
             for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -873,7 +885,18 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
                     scale
                 });
 
+                // abcjs doesn't set a viewBox by default, so the CSS width:100%/height:auto
+                // rule used for print scaling would otherwise just clip the fixed-size SVG
+                // instead of scaling it down to fit the page.
                 const svg = innerDiv.querySelector('svg');
+                if (svg && !svg.getAttribute('viewBox')) {
+                    const svgWidth = svg.getAttribute('width');
+                    const svgHeight = svg.getAttribute('height');
+                    if (svgWidth && svgHeight) {
+                        svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+                    }
+                }
+
                 const renderedHeight = svg?.getBBox?.().height ?? innerDiv.scrollHeight;
                 if (renderedHeight <= printableHeightPx - 10) {
                     break;
@@ -886,7 +909,7 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
 
                 scale = Math.max(0.75, scale * fitFactor);
             }
-        }
+        });
 
         // Let browser paint and settle font metrics before opening print preview.
         if (document.fonts?.ready) {
@@ -913,7 +936,7 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
         window.addEventListener('afterprint', cleanupPrintContainer, { once: true });
 
         window.print();
-    }, [printPages, minMeasuresPerLine, maxMeasuresPerLine, timeSignature]);
+    }, [printPages, minMeasuresPerLine, maxMeasuresPerLine, timeSignature, isAuthenticated, savedSongs, selectedSongId]);
 
     const handleMinMeasuresChange = (event) => {
         const nextMin = clampToPositiveInteger(event.target.value, DEFAULT_MIN_MEASURES_PER_LINE);
