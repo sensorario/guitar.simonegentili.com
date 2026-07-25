@@ -1002,7 +1002,7 @@ function GuitarFretboard({ isAuthenticated, authToken, onRequireLogin }) {
     const loadSong = (name) => {
         const song = visibleSongs.find((s) => s.name === name);
         if (!song) return;
-        setNoteStack(JSON.parse(song.value));
+        setNoteStack(song.value);
         setSelectedSong(name);
     };
 
