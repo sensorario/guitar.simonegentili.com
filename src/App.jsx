@@ -2,6 +2,7 @@ import { SGFooter, QuadratoHeader } from '@sensorario/sg-components'
 import { useRef, useState } from 'react'
 import './App.css'
 import GuitarFretboard from './GuitarFretboard'
+import configRepository from './repositories/ConfigRepository'
 
 // Cookie condiviso su .simonegentili.com: un utente già autenticato su un
 // altro prodotto della famiglia (es. quadrato) risulta loggato anche qui.
@@ -48,6 +49,7 @@ function App() {
     clearAuthCookie()
     localStorage.removeItem(USERNAME_KEY)
     localStorage.removeItem(LEGACY_SONGS_STORAGE_KEY)
+    configRepository.clear()
     setUsername(null)
   }
 
