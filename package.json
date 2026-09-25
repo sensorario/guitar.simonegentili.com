@@ -1,16 +1,16 @@
 {
   "name": "my-react-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && cp .htaccess dist/.htaccess",
+    "build": "npm version patch --no-git-tag-version && vite build && cp .htaccess dist/.htaccess",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@sensorario/sg-components": "^0.0.70",
+    "@sensorario/sg-components": "^0.0.106",
     "abcjs": "^6.6.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
